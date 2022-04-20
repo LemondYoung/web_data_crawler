@@ -12,19 +12,13 @@
 
 import logging
 
+from config import db_map
 from constants import *
-from utils.database.mysql import MySql
-from settings import DOUBAN_DB_CONFIG
-
-douban_db = MySql(**DOUBAN_DB_CONFIG)
 
 
 # 保存数据
 def save_table_data(table_name, records, date=None, mode=STORE_DATA_REPLACE, target_db_name='douban_db', delete_info=None):
-    if target_db_name == 'douban_db':
-        db = douban_db
-    else:
-        raise ValueError('数据库错误')
+    db = db_map[target_db_name]
     logging.warning('目标数据库为%s', target_db_name)
     if mode == STORE_DATA_REPLACE:
         logging.info('当前入库模式为 REPLACE')

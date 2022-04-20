@@ -10,9 +10,7 @@ import sys
 
 import pymysql
 from DBUtils.PooledDB import PooledDB
-# from playhouse.pool import PooledMySQLDatabase
-# from playhouse.shortcuts import ReconnectMixin
-from settings import DOUBAN_DB_CONFIG
+
 
 # 警告转换为错误
 from warnings import filterwarnings
@@ -23,7 +21,7 @@ filterwarnings('error', category=pymysql.Warning)
 MAX_ROW_COUNT = 1000
 
 
-class MySql(object):
+class Mysql(object):
     INSERT_MODE = 1
     REPLACE_MODE = 2
     UPDATE_MODE = 3

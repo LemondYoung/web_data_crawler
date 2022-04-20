@@ -9,11 +9,8 @@
 @Desc   ：
 ==================================================
 """
+from config import db_map
 
-from utils.database.mysql import MySql
-from settings import DOUBAN_DB_CONFIG
-
-douban_db = MySql(**DOUBAN_DB_CONFIG)
 
 def get_all_url(is_download=True, is_parse=True, limit=None, return_type='list'):
     sql = """
@@ -26,7 +23,7 @@ def get_all_url(is_download=True, is_parse=True, limit=None, return_type='list')
         sql += """ and is_parse = 0"""
     if limit:
         sql += """ limit {limit} """.format(limit=limit)
-    data = douban_db.query(sql)
+    data = db_map.get('weibo_data').query(sql)
     if return_type == 'list':
         url_list = [item['url'] for item in data]
         return url_list

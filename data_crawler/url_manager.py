@@ -9,51 +9,69 @@
 @Desc   ：
 ==================================================
 """
-from data_sync.data_extract.douban_data import get_all_url
-from data_sync.data_load.mysql_data_load import save_table_data
-from data_parse.parse_tools.url_parse import split_douban_url
+import logging
 
 from constants import *
+from data_crawler.html_outputer import HtmlOutput
 
-# url管理器
+# 获取不同类型的url
+def get_urls(url_type, style_code=None, limit=None, return_type='map', type='add'):
+    sql = """
+    select url_type, url from s_url_manager
+    where url_type = '{url_type}'
+    """.format(url_type=url_type)
+    if type == 'add':
+        sql += """ and url_status = 0 """
+    if style_code:
+        sql += """ and style_code = '{style_code}' """.format(style_code=style_code)
+    if limit:
+        sql += """ limit {limit} """.format(limit=limit)
+    data = db.query(sql)
+    if return_type == 'map':
+        data_map = {}
+        for item in data:
+            if item['url_type'] not in data_map:
+                data_map[item['url_type']] = [item['url']]
+            else:
+                data_map[item['url_type']].append(item['url'])
+        return data_map
+    elif return_type == 'list':
+        return [item['url'] for item in data]
+    else:
+        return data
+
 class UrlManager(object):
 
     def __init__(self):
         self.table_name = 's_url_manager'
 
     # 获取url
-    def get_all_url(self, is_download=None, is_parse=None):
-        url_list = get_all_url(return_type='list', is_download=is_download, is_parse=is_parse)
+    @staticmethod
+    def get_all_url(url_type, style_code=None, is_download=None, is_parse=None):
+        url_list = get_urls(url_type, style_code=style_code, return_type='map', type='add')
         return url_list
 
     # 添加url
-    def add_url(self, url):
-        split_result = split_douban_url(url)
-        _ = {
-            'url': split_result.get('url'),
-            'url_type': split_result.get('url_type'),
-            'is_download': 0,
-            'is_parse': 0
-        }
-        dic = [_]
-        save_result = self.save_url(url_dict=dic, mode=STORE_DATA_REPLACE)
-        return save_result
-
-    def update_url(self, url):
-        split_result = split_douban_url(url)
-        _ = {
-            'url': split_result.get('url'),
-            'url_type': split_result.get('url_type'),
-            'is_download': 1,
-            'is_parse': 1
-        }
-        dic = [_]
-        save_result = self.save_url(url_dict=dic, mode=STORE_DATA_REPLACE)
-        return save_result
-
-    def save_url(self, url_dict, mode):
-        result = save_table_data(table_name=self.table_name, records=url_dict, mode=mode)
-        if not result:
+    def add_url(self, url_data):
+        if url_data is None:
+            logging.error('url为空')
             return False
+        save_result = self.save_url(url_data=url_data, mode=STORE_DATA_REPLACE)
+        return save_result
+
+    def update_url(self, url, result=True):
+        logging.info('更新 %s 状态', url)
+        if result:
+            url_data = [{'url': url, 'url_status': 1}]
         else:
-            return True
+            url_data = [{'url': url, 'url_status': 2}]
+        save_result = self.save_url(url_data=url_data, mode=STORE_DATA_UPDATE)
+        return save_result
+
+    def save_url(self, url_data, mode):
+        result, msg = HtmlOutput().save_table_data(table_name=self.table_name, records=url_data, mode=mode)
+        return result
+
+
+if __name__ == '__main__':
+    UrlManager().summary_url()
