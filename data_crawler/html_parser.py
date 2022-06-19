@@ -18,21 +18,16 @@ class Parser(object):
         self.cur_url = None
         self.table_name = None
 
-    def parse_data(self, html, url=None):
+    def parse_data(self, html, url=None, **kwargs):
         pass
 
     def transform_data(self, data_dict):
-        url_data = data_dict.get('s_url_manager').get('data')
-        if url_data:
-            for item in url_data:
-                item['data_source'] = None
-                item['style_code'] = self.style
         return data_dict
 
-    def run_parser(self, html, url, **kwargs):  # 从接收下载的html开始
+    def run_parser(self, html, url, parser_type=None, **kwargs):  # 从接收下载的html开始
         self.style = kwargs['style']
         # 解析数据（结果数据 + url数据）
-        data = self.parse_data(html, url)
+        data = self.parse_data(html, url, parser_type=parser_type, **kwargs)
 
         data_dict = self.transform_data(data)
 

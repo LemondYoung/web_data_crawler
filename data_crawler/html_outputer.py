@@ -32,7 +32,7 @@ class HtmlOutput(object):
     def __init__(self, table_name=None):
         self.table_name = table_name
         self.target_db = 'weibo_data'
-        self.save_mode = STORE_DATA_REPLACE
+        self.save_mode = STORE_DATA_UPDATE
 
     def save_table_data(self, table_name, records, date=None, mode=STORE_DATA_REPLACE, target_db_name='weibo_data', delete_info=None):
         if not table_name:

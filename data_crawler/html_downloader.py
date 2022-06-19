@@ -10,8 +10,14 @@
 ==================================================
 """
 import logging
+import os
+from PIL import Image
 
 import requests
+
+from data_sync.data_extract.weibo_data import get_img_data
+from settings import IMG_PATH
+from utils.widget import random_password
 
 
 class HtmlDownloader(object):
@@ -23,7 +29,6 @@ class HtmlDownloader(object):
             # 'Cookie': 'bid=lMoU-zG5PyM; ap_v=0,6.0; ll="118318"; _pk_ref.100001.4cf6=["","",1629127326,"https://www.douban.com/search?q=%E8%B5%B7%E9%A3%8E%E4%BA%86"]; _pk_id.100001.4cf6=dc9bc732d899e6b0.1629127326.1.1629127326.1629127326.; _pk_ses.100001.4cf6=*; __utma=30149280.44131403.1629127326.1629127326.1629127326.1; __utmc=30149280; __utmz=30149280.1629127326.1.1.utmcsr=douban.com|utmccn=(referral)|utmcmd=referral|utmcct=/search; __utma=223695111.1271915937.1629127326.1629127326.1629127326.1; __utmb=223695111.0.10.1629127326; __utmc=223695111; __utmz=223695111.1629127326.1.1.utmcsr=douban.com|utmccn=(referral)|utmcmd=referral|utmcct=/search; __gads=ID=577f92e35a24ede4-226a22dfcfca00e9:T=1629127330:RT=1629127330:S=ALNI_MZjLpS9mRSkcArTIkN5ovX4MmgbSg; _vwo_uuid_v2=D8D767506C7ADFF6F529102491C4ABD70|620d2d0e0c1be943504124c4fabda8f2; __utmt=1; __utmb=30149280.2.9.1629127342196',
         }
 
-        self.return_type = 'obj'
 
     def request_data(self, url, connect_time=10, read_time=10, headers_dict=None):
         if headers_dict and len(headers_dict) > 0:
@@ -46,3 +51,47 @@ class HtmlDownloader(object):
         return response
 
 
+    def download_img(self, img_url, img_dir_path=None, img_type='jpg', return_type='obj'):
+        if not img_dir_path:
+            img_dir_path = IMG_PATH
+        img_name = get_img_data(img_url=img_url, return_type='map', return_value='img_name').get(img_url)
+        if img_name is None:
+            logging.error('未获取到 %s 图片信息，请检查', img_url)
+            img_name = random_password(count=28, type='uuid')
+        img_path = os.path.join(img_dir_path, img_name + '.' + img_type)
+        # 下载图片
+        reponse = requests.get(img_url, headers=self.headers, stream=True, timeout=(60, 300))  # 连接超时60s，读取超时300s
+        status_code = reponse.status_code
+        if status_code != 200:
+            logging.error('图片获取失败,%s', status_code)
+            return False
+        else:
+            logging.info('图片获取成功，%s，耗时%sms', status_code, reponse.elapsed.microseconds)
+        # size = reponse.size
+        result = open(img_path, 'wb').write(reponse.content)  # 将内容写入图片
+        logging.info("图片保存成功,地址%s, %s", img_path, result)
+
+        # 解析图片格式
+        # req = urllib.request.Request(url=img_url, headers=self.headers)
+        # resp = urllib.request.urlopen(req)
+        # resp = request.urlopen(img_url)
+        img = Image.open(img_path)
+        if return_type == 'obj':
+            return img
+        elif return_type == 'path':
+            return img_path
+
+
+    def download_video(self, url, dir_path=None, type='jpg', return_type='obj'):
+        collection_source_list = ['bilibili', 'weibo']  # 待控制
+
+
+
+
+
+if __name__ == '__main__':
+    '''
+    img_path 里面填图片路径,这里分两种情况讨论:
+    第一种:假设你的代码跟图片是在同一个文件夹，那么只需要填文件名,例如 test1.jpg (test1.jpg 是图片文件名)
+    第二种:假设你的图片全路径是 D:/img/test1.jpg ,那么你需要填 D:/img/test1.jpg
+    '''

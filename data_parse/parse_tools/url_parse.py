@@ -14,7 +14,12 @@ import urllib
 from urllib import parse
 
 
+# 分割字符串
 def split_url(url):
+    """
+    :param url:
+    :return:
+    """
     url_all = urllib.parse.urlparse(url)
     url_path = os.path.normpath(url_all.path).split(os.sep)[1:]
     url_dict = {
@@ -27,6 +32,7 @@ def split_url(url):
     return url_dict
 
 
+# 分割豆瓣url
 def split_douban_url(url):
     url_dict = split_url(url)
     url_type_value = url_dict['path'][1]

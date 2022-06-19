@@ -13,11 +13,13 @@ import logging
 import random
 import time
 
-from config import parser
+from config import parser_map
 from data_crawler.html_downloader import HtmlDownloader
 from data_crawler.html_outputer import HtmlOutput
-from data_crawler.url_manager import UrlManager
+from data_crawler.url_manager import UrlManager, get_urls
+from data_sync.data_extract.weibo_data import get_poetry_img
 from settings import COOKIE
+from utils.computer.dir import Dir
 
 from utils.log import InterceptHandler
 
@@ -82,43 +84,53 @@ class spiderMain(object):
                         logging.error('网页下载失败，跳过')
                         logging.warning(url)
                         continue
-                elif download_type == 'img':
-
+                elif download_type == 'img_url':
                     logging.info('要下载的图片url=%s', url)
-                    html = self.htmlDownloader.download_img(img_url=url)
+                    html = self.htmlDownloader.download_img(img_url=url, return_type='path')
                     if html is False:
                         logging.error('下载图片失败')
                         continue
                     logging.info('保存图片成功')
-
+                elif download_type == 'img_path':
+                    html = url
                 # 解析器解析数据
                 logging.info('[2.2]、开始解析数据，当前解析类型%s', parser_type)
-                cur_parser = parser.get(parser_type)
-                table_name = cur_parser.table_name
+                cur_parser = parser_map.get(parser_type)
                 logging.info('当前解析器为%s', cur_parser.__class__.__name__)
-                data_dict = cur_parser.run_parser(html=html, url=url, **kwargs)
+                data_dict = cur_parser.run_parser(html=html, url=url, parser_type=parser_type, **kwargs)
+                result = data_dict['result']
+                data_list = data_dict['data_list']
+                if result:
+                    # 保存数据
+                    logging.info('[2.2]、解析数据成功')
+                    logging.info('[2.3]、开始保存数据')
+                    for j, table_data in enumerate(data_list, 1):
+                        table_name = table_data['table_name']
+                        data = table_data['data']
+                        logging.info('[2.3.%s]、目标表%s', table_name, j)
+                        if table_name == 's_url_manager':
+                            logging.info('保存url，个数%s', len(data) if data else None)
+                            add_result = UrlManager().add_url(url_data=data)
+                        else:
+                            save_result, msg_dict = HtmlOutput(table_name=table_name).save_data(data)
+                    UrlManager().update_url(url=url, result=result)
+                    logging.info('[2.3]、保存data成功，数量%s', len(data_list) if data_list else None)
+                else:
+                    logging.error('[2.2]、解析数据失败')
+                    UrlManager().update_url(url=url, result=False)
 
-                # 保存数据
-                logging.info('[2.3]、开始保存数据')
-                for table_name, table_data in data_dict.items():
-                    logging.info('目标表%s', table_name)
-                    url = table_data['url']
-                    parser_result = table_data['result']
-                    data = table_data['data']
-                    if table_name == 's_url_manager':
-                        logging.info('[2.4]、保存url，个数%s', len(data) if data else None)
-                        add_result = UrlManager().add_url(url_data=data)
-                    else:
-                        save_result, msg_dict = HtmlOutput(table_name=table_name).save_data(data)
-                        if not save_result:
-                            logging.info('[2.3]、保存数据失败')
-                            return False
-                        logging.info('[2.3]、保存data成功，数量%s', len(data_dict) if data_dict else None)
-                        UrlManager().update_url(url=url, result=parser_result)
 
-    def run(self, parser_type, urls: list = None, style='academic-art'):
+    def run(self, parser_type, urls: list = None, style='academic-art', **kwargs):
         logging.info('解析类型为%s', parser_type)
-        self.run_crawler(parser_type=parser_type, urls_list=urls, style=style)
+        if parser_type == 'img_url':
+            urls = get_urls(url_type='img', style_code='original', return_type='list', type='add') if not urls or len(urls) == 0 else urls
+            self.run_crawler(parser_type=parser_type, urls_list=urls, style=style, download_type=parser_type, **kwargs)
+        if parser_type == 'img_path':
+            self.run_crawler(parser_type=parser_type, urls_list=urls, style=style, download_type=parser_type, **kwargs)
+        else:
+            urls = get_urls(url_type='blog', style_code=None, return_type='list', type='add') if not urls or len(urls) == 0 else urls
+            self.run_crawler(parser_type=parser_type, urls_list=urls, style=style, **kwargs)
+
 
 
 
@@ -131,6 +143,12 @@ if __name__ == '__main__':
 
     # 获取风格的page_url
     style = 'realism'
-    url_list = ['https://weibo.com/ajax/statuses/mymblog?uid=2100623570&page=2&feature=0']
-    spiderMain().run(parser_type='weibo_blog', urls=url_list, style=style)
+    url_list = ['https://weibo.com/ajax/statuses/mymblog?uid=2100623570&page=5']
+    # url_list = get_poetry_img(content='快来看看最打动你的作品是哪首', return_type='list')
+    dir_path = r'D:\software\pycharm\project\data_sync\web_data_crawler\src\tmp'
+    new_dir_path = r'D:\software\pycharm\project\data_sync\web_data_crawler\src\imgs'
+    url_list = Dir(dir_path).find_files()
+    # url_list = get_urls(url_type='img_url', return_type='list')
+    spiderMain().run(parser_type='img_path', urls=url_list, style=style, dir_path=new_dir_path)
+
 

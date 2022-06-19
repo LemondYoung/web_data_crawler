@@ -11,8 +11,10 @@
 """
 import logging
 
+from config import db_map
 from constants import *
 from data_crawler.html_outputer import HtmlOutput
+
 
 # 获取不同类型的url
 def get_urls(url_type, style_code=None, limit=None, return_type='map', type='add'):
@@ -26,7 +28,7 @@ def get_urls(url_type, style_code=None, limit=None, return_type='map', type='add
         sql += """ and style_code = '{style_code}' """.format(style_code=style_code)
     if limit:
         sql += """ limit {limit} """.format(limit=limit)
-    data = db.query(sql)
+    data = db_map.get('weibo_data').query(sql)
     if return_type == 'map':
         data_map = {}
         for item in data:
@@ -39,6 +41,7 @@ def get_urls(url_type, style_code=None, limit=None, return_type='map', type='add
         return [item['url'] for item in data]
     else:
         return data
+
 
 class UrlManager(object):
 
@@ -64,7 +67,7 @@ class UrlManager(object):
         if result:
             url_data = [{'url': url, 'url_status': 1}]
         else:
-            url_data = [{'url': url, 'url_status': 2}]
+            url_data = [{'url': url, 'url_status': -1}]  # 失败
         save_result = self.save_url(url_data=url_data, mode=STORE_DATA_UPDATE)
         return save_result
 
@@ -74,4 +77,5 @@ class UrlManager(object):
 
 
 if __name__ == '__main__':
-    UrlManager().summary_url()
+    dd = get_urls(url_type='img_url', return_type='list')
+    print(dd)
