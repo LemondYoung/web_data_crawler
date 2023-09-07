@@ -4,7 +4,7 @@
 # 获取绘画信息
 import json
 
-from config import db_map
+from settings import db_map
 db = db_map.get('weibo_data')
 
 

@@ -15,7 +15,6 @@ from PIL import Image
 
 import requests
 
-from data_sync.data_extract.weibo_data import get_img_data
 from settings import IMG_PATH
 from utils.widget import random_password
 
@@ -31,6 +30,13 @@ class HtmlDownloader(object):
 
 
     def request_data(self, url, connect_time=10, read_time=10, headers_dict=None):
+        """
+        :param url:
+        :param connect_time:
+        :param read_time:
+        :param headers_dict: 额外的header。主要是cookie
+        :return:
+        """
         if headers_dict and len(headers_dict) > 0:
             for k, v in headers_dict.items():
                 self.headers[k] = v
@@ -52,6 +58,13 @@ class HtmlDownloader(object):
 
 
     def download_img(self, img_url, img_dir_path=None, img_type='jpg', return_type='obj'):
+        """
+        :param img_url:
+        :param img_dir_path:
+        :param img_type: 图片类型
+        :param return_type:
+        :return:
+        """
         if not img_dir_path:
             img_dir_path = IMG_PATH
         img_name = get_img_data(img_url=img_url, return_type='map', return_value='img_name').get(img_url)

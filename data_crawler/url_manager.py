@@ -11,7 +11,7 @@
 """
 import logging
 
-from config import db_map
+from settings import db_map
 from constants import *
 from data_crawler.html_outputer import HtmlOutput
 
@@ -62,7 +62,13 @@ class UrlManager(object):
         save_result = self.save_url(url_data=url_data, mode=STORE_DATA_REPLACE)
         return save_result
 
+    # 更新url
     def update_url(self, url, result=True):
+        """
+        :param url:
+        :param result: 两种状态，成功或失败，都要更新
+        :return:
+        """
         logging.info('更新 %s 状态', url)
         if result:
             url_data = [{'url': url, 'url_status': 1}]

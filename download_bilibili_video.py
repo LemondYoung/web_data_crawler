@@ -1,3 +1,8 @@
+
+"""
+测试下载bilibil视频
+"""
+
 import logging
 import os.path
 
@@ -13,15 +18,16 @@ from you_get import common as you_get
 from you_get.extractors import Bilibili
 from you_get.json_output import download_urls
 # from you_get.extractor import Bilibili
-from config import db_map
+from settings import db_map
 from constants import STORE_DATA_UPDATE
 from data_parse.parse_tools import danmaku2ass
 from data_sync.data_load.mysql_data_load import save_table_data
 from utils import globalvar
+from utils.log import InterceptHandler
 
 
 # 下载哔哩哔哩视频
-def download_bilibili_video(url_list, dir_path, xml_path=None, ass_path=None, is_download_video=True, is_transform_ass=True, title=None):
+def download_bilibili_video(url_list, dir_path, xml_path=None, ass_path=None, is_download_video=True, is_transform_ass=True, title=None, is_debug=True):
     """
     :param url_list:
     :param dir_path:
@@ -29,6 +35,8 @@ def download_bilibili_video(url_list, dir_path, xml_path=None, ass_path=None, is
     :param ass_path: 标准的字幕路径，默认空  # r'D:\video\为了逃避生活，我骑行流浪一年了，每天都在向着远方前行，但是最近也迷茫了.cmt.ass'
     :param is_download_video:  是否转换下载视频，默认真
     :param is_transform_ass:  是否转换字幕文件，默认真
+    :param title: 视频标题，默认空
+    :param is_debug: 是否debug
     :return:
     """
     for index, url in enumerate(url_list, 1):
@@ -44,10 +52,12 @@ def download_bilibili_video(url_list, dir_path, xml_path=None, ass_path=None, is
         else:
             logging.info('保存到 %s', dir_path)
             sys.argv = ['you-get', url, '-o', dir_path]
+            if is_debug:
+                sys.argv.append('--debug')
             try:
                 you_get.main()
             except Exception as e:
-                logging.error('下载视频失败，重试')
+                logging.error('下载视频失败，重试, %s', e)
                 continue
         if not title:
             title = globalvar.get_value('video_title')  # 从全局变量里捞回来的，要修改依赖包
@@ -65,19 +75,20 @@ def download_bilibili_video(url_list, dir_path, xml_path=None, ass_path=None, is
         logging.info('弹幕原文件%s，转换后%s', xml_path, ass_path)
         sys.argv = ['file', xml_path,
                     '-o', ass_path,
-                    '--size', '1080x1080', '--font', '"MS PGothic"', '--fontsize', '38', '--alpha', '0.6', '-dm', '15', '-ds', '5'  # 弹幕配置，欢喜就好
+                    '--size', '1080x1080', '--font', '"MS PGothic"', '--fontsize', '38', '--alpha', '0.6', '-dm', '15', '-ds', '5' # 弹幕配置，欢喜就好
                     ]
         danmaku2ass.main()
 
 
 def get_bilibili_video_url(return_type=None):
     sql = """ select url, url_name from s_url_manager where 1=1 
-    and data_source = 'bilibili' and style_code = 'xuyun' and url_type = 'video' 
-    and url_status = 0"""
+    and source_name = 'bilibili'  and url_type = 'video' and url_status = 0"""
     data = db_map.get('bilibili_data').query(sql)
     return data
 
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO)
+
     url_list = [
         # 'https://www.bilibili.com/video/BV163411g7Ke',
         # 'https://www.bilibili.com/video/BV1R34y1V7xr',
@@ -243,9 +254,10 @@ if __name__ == '__main__':
         'https://www.bilibili.com/video/BV1VM4y15727',
     ]
     data = get_bilibili_video_url()
-    dir_path = r'd:\video'
+    dir_path = r'f:\video'
     title = None
-    logging.basicConfig(level=logging.INFO)
+
+    logging.info('获取到要下载的video个数:%s', len(data))
     for index, item in enumerate(data, 1):
         logging.info('【【%s/%s】】', index, len(data))
         url = item['url']

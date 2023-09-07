@@ -85,7 +85,7 @@ def standardize_date(date, param_separator='', return_separator=''):
             return False
     else:  # 无分隔符交集，且日期不为8位，错误
         return False
-    if new_date not in get_date_list():
+    if new_date not in get_stable_date_list():
         logging.error('日期取值错误')
         return False
     return new_date

@@ -12,7 +12,7 @@
 
 import logging
 
-from config import db_map
+from settings import db_map
 from constants import *
 
 

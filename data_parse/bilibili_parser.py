@@ -6,9 +6,11 @@
 # Description： 解析哔哩哔哩的url
 """
 import logging
+import os
 
 from data_parse.parse_tools.json_parser import read_json_file
 from data_sync.data_load.mysql_data_load import save_table_data
+from settings import JSON_PATH
 
 """可以返回指定用户的视频列表
 pn 第几页
@@ -58,11 +60,12 @@ def get_bilibili_video_json_code(json_obj, return_type=None):
 
 
 def run_bilibili_video_json_code():
+    cur_path = os.path.join(JSON_PATH, 'bilibili_user_videos', 'xuyun')
     json_path_list = [
-        r'D:\software\pycharm\project\data_sync\web_data_crawler\data\json\bilibili_user_videos\xuyun\xuyun_1.json',
-        r'D:\software\pycharm\project\data_sync\web_data_crawler\data\json\bilibili_user_videos\xuyun\xuyun_2.json',
-        r'D:\software\pycharm\project\data_sync\web_data_crawler\data\json\bilibili_user_videos\xuyun\xuyun_3.json',
-        r'D:\software\pycharm\project\data_sync\web_data_crawler\data\json\bilibili_user_videos\xuyun\xuyun_4.json',
+        os.path.join(cur_path, 'xuyun_1.json'),
+        os.path.join(cur_path, 'xuyun_2.json'),
+        os.path.join(cur_path, 'xuyun_3.json'),
+        os.path.join(cur_path, 'xuyun_4.json'),
         ]
 
     all_df = pd.DataFrame()

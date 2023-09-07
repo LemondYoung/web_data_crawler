@@ -11,6 +11,7 @@ from lxml import etree
 from data_crawler.html_parser import Parser
 from data_parse.parse_tools.img_parser import ocr, get_img_info
 from data_parse.parse_tools.url_parse import split_url
+from data_sync.data_extract.knowledge_data import get_knowledge_data
 from settings import db_map
 from utils.computer.file import File
 
@@ -105,11 +106,22 @@ class WeiboImgParser(Parser):
 
     def parse_data(self, html, url=None, parser_type=None, **kwargs):
         img_path = html
+        logging.info('要解析的图片文件为%s', img_path)
         dir_path = kwargs.get('dir_path')
         # content 是识别后得到的结果
-        ocr_text = ocr(img_path)
+        try:
+            ocr_text = ocr(img_path)
+            logging.info('获取到图片信息 %s', ocr_text)
+        except Exception as e:
+            logging.error('orc解析圖片失敗，%s',e)
+            return {
+                'url': url,
+                'result': False,
+                'data_list': []
+            }
         img_info = get_img_info(img_path)
-        品_index = None
+        # 尝试解析图片开头位置（由于图片像素不一致，不能确保准确获取开头标识）
+        品_index = 作_index = None
         for text in ocr_text:
             if '品' in text:
                 品_index = ocr_text.index(text)
@@ -117,16 +129,53 @@ class WeiboImgParser(Parser):
         if 品_index is None:
             for text in ocr_text:
                 if '作' in text:
-                    品_index = ocr_text.index(text)
+                    作_index = ocr_text.index(text)
                     break
+        if 品_index is None and 作_index is None:
+            logging.error('获取作品失败')
+            logging.error(ocr_text)
+            return {
+                'url': url,
+                'result': False,
+                'data_list': []
+            }
         try:
+            # 推测结尾位置
             last_index = ocr_text.index('大赛详情及投稿见@上海交通大学研究生会置顶微博')
-            text_index = ocr_text[品_index - 1]
-            text_title = ocr_text[品_index + 1]
-            text_author = ocr_text[last_index - 3]
-            text_content = ocr_text[品_index + 2: last_index - 3]
+            text_author_collage = ocr_text[last_index - 2]
+            if '上海充通' in text_author_collage or '上海文通' in text_author_collage or '上游充通' in text_author_collage \
+                or '上海克通' in text_author_collage or '上海文夏' in text_author_collage:
+                text_author_collage = ocr_text[last_index - 3]
+            if 品_index:
+                code_index = 品_index - 1
+                title_index = 品_index + 1
+                content_begin_index = 品_index + 2
+                if len(ocr_text[code_index]) != 3:
+                    code_index = 品_index + 1
+                    title_index = 品_index + 2
+                    content_begin_index = 品_index + 3
+            elif 作_index:
+                code_index = 作_index + 1
+                title_index = 作_index + 2
+                content_begin_index = 作_index + 3
+            author_collage_index = ocr_text.index(text_author_collage)
+            text_index = ocr_text[code_index]
+            text_title = "《" + ocr_text[title_index] + "》"
+            text_content = ocr_text[content_begin_index: author_collage_index]
+            logging.info('猜测的名称为%s', [text_index, text_title, text_author_collage])
         except Exception as e:
             logging.error('图片ocr解析格式错误，%s', e)
+            logging.error(ocr_text)
+            return {
+                'url': url,
+                'result': False,
+                'data_list': []
+            }
+        # 尝试分解姓名和学校
+        author, collage = collage_in_poetry_title(content=text_author_collage)
+        logging.info('实际的名称为%s', [text_index, text_title, author, collage])
+        if not author and not collage:
+            logging.error('图片名称错误，%s', text_author_collage)
             logging.error(ocr_text)
             return {
                 'url': url,
@@ -136,12 +185,13 @@ class WeiboImgParser(Parser):
         img_content_dict = {
             'index': text_index,
             'title': text_title,
-            'author': text_author,
+            'author': author,
+            'collage': collage,
             'content': text_content,
         }
-        # 重命名
-        if text_title and text_author and dir_path:
-            img_name = text_index + ' - ' + text_title + ' - ' + text_author
+        # 图片重命名保存
+        if text_title and author and collage and dir_path:
+            img_name = text_index + ' - ' + text_title + ' - ' + author + ' - ' + collage
             new_img_path = os.path.join(dir_path, img_name + '.jpg')
             try:
                 os.rename(img_path, new_img_path)  # 重命名,覆盖原先的名字
@@ -154,7 +204,7 @@ class WeiboImgParser(Parser):
                     'result': False,
                     'data_list': []
                 }
-
+        # 返回图片的url、内容、格式等信息
         img_item = {
             'img_url': url,
             'content': json.dumps(img_content_dict, ensure_ascii=False, indent=2),
@@ -163,11 +213,11 @@ class WeiboImgParser(Parser):
             'height': img_info.get('height'),
             'parser_type': parser_type,
         }
-        if text_title and text_author:
-            img_item['img_name'] = text_index + ' - ' + text_title + ' - ' + text_author
+        # 返回图片的名称
+        if text_title and author and collage:
+            img_item['img_name'] = text_index + ' - ' + text_title + ' - ' + author + ' - ' + collage
         else:
             img_item['img_name'] = None
-
 
         img_data = [img_item]
         return {
@@ -179,21 +229,32 @@ class WeiboImgParser(Parser):
         }
 
 
+# 专用方法，大学list匹配诗歌名称
+def collage_in_poetry_title(content):
+    collage_list = get_knowledge_data('t_all_collage', return_type='list', return_value='collage_name')
+    cc = [collage for collage in collage_list if collage in content]
+    if len(cc) == 1:  # 一个就对了
+        collage = cc[0]
+    elif len(cc) > 1:  # 可能有重叠的大学
+        collage = max(cc, key=len, default='')
+        logging.warning('%s学校有重名，默认匹配最长的那个，也就是 %s', cc, collage)
+    else:  # 啥情况？
+        logging.error('%s，未匹配到大学，%s退出检查', content, cc)
+        return None, None
+    author = content.split(collage)[0]
+    return author, collage
+
+
 # 数据库中的poetry content转存txt文件
 def poetry_to_txt():
-    collage_list = File(file_path=r'D:\software\pycharm\project\data_sync\web_data_crawler\data\txt\all_college.txt').read_txt_data()
-    collage_str = ''.join(collage_list)
     sql = """select content from t_img_info where content is not null"""
     data = db_map.get('weibo_data').query(sql)
     for item in data:
         d = json.loads(item['content'])
         print(d)
-        cc = [collage for collage in collage_list if collage in d['author']]
-        if len(cc) != 1:  # 啥情况？
-            print(d['author'] + '匹配到啥了？', cc)
+        author, collage = collage_in_poetry_title(content=d['author'])
+        if not author and not collage:
             continue
-        collage = cc[0]
-        author = d['author'].split(collage)[0]
         title = d['index'] + ' - ' + d['title'] + ' - ' + author + ' - ' + collage
         file_path = os.path.join(r'D:\software\pycharm\project\data_sync\web_data_crawler\data\txt\poetry', title+'.txt')
         File(file_path=file_path, is_check_file=False).save_txt(d['content'])

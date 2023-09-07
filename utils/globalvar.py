@@ -2,6 +2,7 @@ def _init():
     global _global_dict
     _global_dict = {}
 
+_init()
 
 def set_value(name, value):
     _global_dict[name] = value

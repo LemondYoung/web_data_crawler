@@ -3,9 +3,11 @@
 from PIL import Image
 
 import requests
+from retrying import retry
+
 import base64
 
-
+@retry
 def ocr(img_path: str) -> list:
     '''
     根据图片路径，将图片转为文字，返回识别到的字符串列表

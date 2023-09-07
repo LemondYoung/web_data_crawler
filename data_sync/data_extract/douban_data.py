@@ -9,7 +9,7 @@
 @Desc   ：
 ==================================================
 """
-from config import db_map
+from settings import db_map
 
 
 def get_all_url(is_download=True, is_parse=True, limit=None, return_type='list'):
