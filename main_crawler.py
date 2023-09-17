@@ -24,9 +24,8 @@ from utils.computer.dir import Dir
 from utils.log import InterceptHandler
 
 
-
 # 主爬虫类
-class spiderMain(object):
+class CrawlerMain(object):
     def __init__(self):
         # 注册工具
         self.urlManager = UrlManager()  # 管理器
@@ -94,6 +93,7 @@ class spiderMain(object):
                 logging.info('[2.1]、开始下载网页，当前下载类型%s', download_type)
                 if download_type == 'text':
                     html = self.htmlDownloader.request_data(url, headers_dict={'cookie': COOKIE})
+                    # html = self.htmlDownloader.request_data(url)
                     if html is False:
                         logging.error('网页下载失败，跳过')
                         logging.warning(url)
@@ -160,7 +160,7 @@ def main_task():
     dir_path = r'D:\app\pycharm\project\data_sync\web_data_crawler\src\original_img'
     new_dir_path = r'D:\app\pycharm\project\data_sync\web_data_crawler\src\middle_img'
     url_list = Dir(dir_path).find_files()
-    spiderMain().run(parser_type='img_path', urls=url_list, style=style, dir_path=new_dir_path)
+    CrawlerMain().run(parser_type='img_path', urls=url_list, style=style, dir_path=new_dir_path)
 
 
 

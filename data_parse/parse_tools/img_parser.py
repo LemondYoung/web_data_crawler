@@ -52,7 +52,8 @@ def ocr(img_path: str) -> list:
     return ocr_text
 
 
-def get_img_info(img_path, return_type=None):
+# 图片格式
+def get_img_format(img_path, return_type=None):
     img = Image.open(img_path)
     # format = img.format
     format = img_path.split('.', 1)[-1]
@@ -66,5 +67,7 @@ def get_img_info(img_path, return_type=None):
 
 
 if __name__ == '__main__':
-    img_path = r'D:\\software\\pycharm\\project\\data_sync\\web_data_crawler\\src\\imgs\\659 - 时光机遐想 - 宋雨嘉四川川农业大学.jpg'
-    get_img_info(img_path)
+    img_path = r'D:\app\pycharm\project\data_sync\web_data_crawler\src\standard_img\659 - 《时光机遐想》 - 宋雨嘉 - 四川农业大学.jpg'
+    # info = get_img_format(img_path)
+    info = ocr(img_path)
+    print(info)

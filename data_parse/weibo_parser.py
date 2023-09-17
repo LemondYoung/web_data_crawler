@@ -9,7 +9,7 @@ import os
 from lxml import etree
 
 from data_crawler.html_parser import Parser
-from data_parse.parse_tools.img_parser import ocr, get_img_info
+from data_parse.parse_tools.img_parser import ocr, get_img_format
 from data_parse.parse_tools.url_parse import split_url
 from data_sync.data_extract.knowledge_data import get_knowledge_data
 from settings import db_map
@@ -98,6 +98,7 @@ class WeiboBlogParser(Parser):
         }
 
 
+# 微博图片解析
 class WeiboImgParser(Parser):
 
     def __init__(self):
@@ -119,7 +120,7 @@ class WeiboImgParser(Parser):
                 'result': False,
                 'data_list': []
             }
-        img_info = get_img_info(img_path)
+        img_format = get_img_format(img_path)
         # 尝试解析图片开头位置（由于图片像素不一致，不能确保准确获取开头标识）
         品_index = 作_index = None
         for text in ocr_text:
@@ -208,9 +209,9 @@ class WeiboImgParser(Parser):
         img_item = {
             'img_url': url,
             'content': json.dumps(img_content_dict, ensure_ascii=False, indent=2),
-            'format': img_info.get('format'),
-            'width': img_info.get('width'),
-            'height': img_info.get('height'),
+            'format': img_format.get('format'),
+            'width': img_format.get('width'),
+            'height': img_format.get('height'),
             'parser_type': parser_type,
         }
         # 返回图片的名称

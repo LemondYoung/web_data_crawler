@@ -1,0 +1,5 @@
+mysqldump -uroot -proot --databases douban_data --tables s_url_manager --no-data> s_url_manager.sql
+mysqldump -uroot -proot --databases douban_data --tables t_movie_comment --no-data> t_movie_comment.sql
+mysqldump -uroot -proot --databases douban_data --tables t_movie_info --no-data> t_movie_info.sql
+mysqldump -uroot -proot --databases douban_data --tables t_user_info --no-data> t_user_info.sql
+mysqldump -uroot -proot --databases douban_data --tables t_user_movie --no-data> t_user_movie.sql

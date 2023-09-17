@@ -51,6 +51,28 @@ class HtmlDownloader(object):
         html = response.text
         return html
 
+    # 请求api
+    def request_api(self, url, connect_time=10, read_time=10, headers_dict=None):
+        """
+        :param url:
+        :param connect_time:
+        :param read_time:
+        :param headers_dict: 额外的header。主要是cookie
+        :return:
+        """
+        if headers_dict and len(headers_dict) > 0:
+            for k, v in headers_dict.items():
+                self.headers[k] = v
+
+        logging.info('请求的url为：%s', url)
+        response = self.__request(url, connect_time, read_time)
+        status_code = response.status_code
+        if status_code != 200:
+            logging.error('网页获取失败,%s', status_code)
+            return False
+        json_data = response.json()
+        return json_data
+
     def __request(self, url, connect_time=10, read_time=10):
         response = requests.get(url, headers=self.headers, timeout=(connect_time, read_time), allow_redirects=False)
         response.encoding = 'utf-8'
@@ -108,3 +130,5 @@ if __name__ == '__main__':
     第一种:假设你的代码跟图片是在同一个文件夹，那么只需要填文件名,例如 test1.jpg (test1.jpg 是图片文件名)
     第二种:假设你的图片全路径是 D:/img/test1.jpg ,那么你需要填 D:/img/test1.jpg
     '''
+    url = r'https://www.zhihu.com/api/v4/questions/585465221/feeds?cursor=d9f38bb508c45bfb520d037a2efe50d2&include=data%5B%2A%5D.is_normal%2Cadmin_closed_comment%2Creward_info%2Cis_collapsed%2Cannotation_action%2Cannotation_detail%2Ccollapse_reason%2Cis_sticky%2Ccollapsed_by%2Csuggest_edit%2Ccomment_count%2Ccan_comment%2Ccontent%2Ceditable_content%2Cattachment%2Cvoteup_count%2Creshipment_settings%2Ccomment_permission%2Ccreated_time%2Cupdated_time%2Creview_info%2Crelevant_info%2Cquestion%2Cexcerpt%2Cis_labeled%2Cpaid_info%2Cpaid_info_content%2Creaction_instruction%2Crelationship.is_authorized%2Cis_author%2Cvoting%2Cis_thanked%2Cis_nothelp%3Bdata%5B%2A%5D.mark_infos%5B%2A%5D.url%3Bdata%5B%2A%5D.author.follower_count%2Cvip_info%2Cbadge%5B%2A%5D.topics%3Bdata%5B%2A%5D.settings.table_of_content.enabled&limit=5&offset=0&order=default&platform=desktop&session_id=1694957978758389513'
+    html = HtmlDownloader().request_api(url)

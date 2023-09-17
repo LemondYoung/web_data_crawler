@@ -10,13 +10,13 @@
 ==================================================
 """
 import logging
-
+import random
 from settings import db_map
 from constants import *
 from data_crawler.html_outputer import HtmlOutput
 
 
-# 获取不同类型的url
+# 从数据库获取不同类型的url
 def get_urls(url_type, style_code=None, limit=None, return_type='map', type='add'):
     sql = """
     select url_type, url from s_url_manager
@@ -45,8 +45,9 @@ def get_urls(url_type, style_code=None, limit=None, return_type='map', type='add
 
 class UrlManager(object):
 
-    def __init__(self):
+    def __init__(self, db_name):
         self.table_name = 's_url_manager'
+        self.db_name = None
 
     # 获取url
     @staticmethod
@@ -56,9 +57,16 @@ class UrlManager(object):
 
     # 添加url
     def add_url(self, url_data):
+        """
+        添加url
+        :param url_data: list_dict
+        :return:
+        """
         if url_data is None:
             logging.error('url为空')
             return False
+        elif isinstance(url_data, str):
+            url_data = [{'url': url_data}]
         save_result = self.save_url(url_data=url_data, mode=STORE_DATA_REPLACE)
         return save_result
 
@@ -80,6 +88,44 @@ class UrlManager(object):
     def save_url(self, url_data, mode):
         result, msg = HtmlOutput().save_table_data(table_name=self.table_name, records=url_data, mode=mode)
         return result
+
+
+# 切分url列表
+def split_urls(urls, strategy="random"):
+        """
+        切分url
+        :param urls:
+        :param strategy: 策略：random随机
+        :return: list_dict，包含停顿时间、个数，新列表
+        """
+        new_urls = []
+        fixed_num = 10
+        if strategy == 'random':
+            index = 1
+            sub_new_urls = []
+            random_num = random.randint(1, 5)
+            for url in urls:
+                sub_new_urls.append(url)
+                if index == fixed_num + random_num:
+                    new_urls.append({
+                        'urls': sub_new_urls,
+                        'count': len(sub_new_urls),
+                        'sleep': random_num,
+                    })
+                    index = 1
+                    sub_new_urls = []
+                    random_num = random.randint(1, 5)
+                    continue
+                index += 1
+            else:
+                new_urls.append({
+                        'urls': sub_new_urls,
+                        'count': len(sub_new_urls),
+                        'sleep': random_num,
+                    })
+        else:
+            pass
+        return new_urls
 
 
 if __name__ == '__main__':

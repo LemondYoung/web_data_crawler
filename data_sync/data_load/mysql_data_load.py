@@ -17,7 +17,7 @@ from constants import *
 
 
 # 保存数据
-def save_table_data(table_name, records, date=None, mode=STORE_DATA_REPLACE, target_db_name='douban_db', delete_info=None):
+def save_table_data(table_name, records, date=None, mode=STORE_DATA_REPLACE, target_db_name='douban_data', delete_info=None):
     db = db_map[target_db_name]
     logging.warning('目标数据库为%s', target_db_name)
     if mode == STORE_DATA_REPLACE:

@@ -2,7 +2,7 @@
 # -*- coding: UTF-8 -*-
 """
 =================================================
-@Project -> File   ：douban_data_crawler -> douban_crawler
+@Project -> File   ：douban_data_Parser -> douban_Parser
 @IDE    ：PyCharm
 @Author ：Young
 @Date   ：2021/8/16 23:38
@@ -17,17 +17,21 @@ from urllib import parse
 from lxml import etree
 import os
 import requests
-
+from utils.trading_calendar import today
 from constants import *
 from data_crawler.html_downloader import HtmlDownloader
 from data_parse.parse_tools.date_parse import standardize_date
 from data_parse.parse_tools.url_parse import split_douban_url, split_url
 from data_sync.data_load.mysql_data_load import save_table_data
+from utils.class_tool.register_class import ParserRegister, DoubanParserRegister
 
-class DoubanCrawler(object):
+# 获取解析器
+douban_parser_map = DoubanParserRegister()
+
+
+class DoubanParser(object):
 
     def __init__(self):
-        super(DoubanCrawler, self).__init__()
         self.headers = {
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36",
@@ -36,7 +40,7 @@ class DoubanCrawler(object):
         self.target_url = 'https://movie.douban.com/'
         self.cur_url = None
         self.table_name = None
-        self.target_db = 'douban_db'
+        self.target_db = 'douban_data'
         self.save_mode = STORE_DATA_REPLACE
 
     def parse_data(self, html):
@@ -69,10 +73,11 @@ class DoubanCrawler(object):
         return True
 
 
-class DoubanUserCrawler(DoubanCrawler):
+@douban_parser_map.register(func_name='user')
+class DoubanUserParser(DoubanParser):
 
     def __init__(self):
-        super(DoubanUserCrawler, self).__init__()
+        super(DoubanUserParser, self).__init__()
         self.table_name = 't_user_info'
 
     def parse_data(self, html):
@@ -107,7 +112,8 @@ class DoubanUserCrawler(DoubanCrawler):
         return new_data
 
 
-class DoubanMovieCrawler(DoubanCrawler):
+@douban_parser_map.register(func_name='movie')
+class DoubanMovieParser(DoubanParser):
 
     def __init__(self):
         super().__init__()
@@ -177,7 +183,8 @@ class DoubanMovieCrawler(DoubanCrawler):
         return new_data
 
 
-class DoubanCommentCrawler(DoubanCrawler):
+@douban_parser_map.register(func_name='comment')
+class DoubanCommentParser(DoubanParser):
 
     def __init__(self):
         super().__init__()
@@ -240,11 +247,12 @@ class DoubanCommentCrawler(DoubanCrawler):
         return new_data
 
 
-class DoubanUserMovieCrawler(DoubanCrawler):
+@douban_parser_map.register(func_name='user_movie')
+class DoubanUserMovieParser(DoubanParser):
 
     def __init__(self):
         super().__init__()
-        self.table_name = 't_movie_comment'
+        self.table_name = 't_user_movie'
 
     def parse_data(self, html1):
         # html2 = """{html}""".format(html=html)
@@ -254,7 +262,7 @@ class DoubanUserMovieCrawler(DoubanCrawler):
         sub_url = str(html.xpath('//div[@id="db-usr-profile"]/div[@class="pic"]/a/@href')[0])
         user_code = sub_url.split('/')[2]
         # 短评列表
-        movie_list = html.xpath('//div[@id="content"]//div[@class="item"]')
+        movie_list = html.xpath('//div[@class="grid-view"]/div[@class="item comment-item"]')
         new_movie_list = []
         url_list = []
         for movie in movie_list:
@@ -264,18 +272,18 @@ class DoubanUserMovieCrawler(DoubanCrawler):
             try:
                 if len(info_li) >= 3:  # 日期和评分
                     movie_start = movie.xpath('.//div[@class="info"]/ul/li[3]/span[1]/@class')[0]
-                    comment_date = movie.xpath('.//div[@class="info"]/ul/li[3]/span[2]/text()')[0]
+                    comment_date = movie.xpath('.//div[@class="info"]/ul/li[3]/span[@class="date"]/text()')[0]
                     # comment_tag = movie.xpath('.//div[@class="info"]/ul/li[3]/span[3]/text()')[0]
                     if len(info_li) >= 4:  # 评论
                         comment = movie.xpath('.//div[@class="info"]/ul/li[4]/span[1]/text()')[0]
                     else:
-                        logging.warning('%s的评论解析失败, 未标注评论日期或分数', movie_url)
+                        logging.warning('%s的评论解析为空, 未标注评论日期或分数', movie_url)
                         comment = None
                 else:
-                    logging.warning('%s的日期和评论解析失败, 未评论', movie_url)
+                    logging.warning('%s的日期和评论解析为空, 未评论', movie_url)
                     movie_start = comment_date = comment = None
             except Exception as e:
-                logging.error('%s的评论解析失败%s, 其他原因%s', movie_url, e, temp)
+                logging.error('%s的评论解析失败，其他原因%s %s', movie_url, e, temp)
                 continue
                 # try:
                 #     _ = movie.xpath('.//div[@class="info"]/ul/li')
@@ -322,6 +330,53 @@ class DoubanUserMovieCrawler(DoubanCrawler):
         return new_data
 
 
+@douban_parser_map.register(func_name='top250')
+class DoubanTop250Parser(DoubanParser):
+
+    def __init__(self):
+        super().__init__()
+        self.table_name = 't_movie_top250'
+
+    def parse_data(self, html1):
+        # html2 = """{html}""".format(html=html)
+        html = etree.HTML(html1)
+        movie_list = html.xpath('//ol[@class="grid_view"]/li/div[@class="item"]')
+        data = []
+        url_list = []
+        for movie in movie_list:
+            rank = movie.xpath('./div[@class="pic"]/em/text()')[0]
+            movie_url = movie.xpath('./div[@class="info"]/div[@class="hd"]/a/@href')[0]
+            movie_name = movie.xpath('./div[@class="info"]/div[@class="hd"]/a/span[@class="title"]/text()')[0]
+            star = movie.xpath('./div[@class="info"]/div[@class="bd"]/div[@class="star"]/span[@class="rating_num"]/text()')[0]
+            try:
+                brief = movie.xpath('./div[@class="info"]/div[@class="bd"]/p[@class="quote"]/span/text()')[0]
+            except Exception as e:
+                brief = None
+
+            movie_item = {
+                'rank': rank,
+                'movie_url': movie_url,
+                'movie_name': str(movie_name),
+                'star': str(star),
+                'brief': str(brief) or None,
+            }
+            data.append(movie_item)
+            url_list.append({'url': movie_url, 'url_type': 'movie'})
+        return {
+            'data_dict': data,
+            'url_list': url_list,
+        }
+
+    def transform_data(self, data_dict):
+        new_data = []
+        for item in data_dict:
+            item['movie_code'] = split_douban_url(item['movie_url']).get('url_type_value')
+            item['join_date'] = today
+            new_data.append(item)
+        return new_data
+
+
+
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
@@ -329,8 +384,8 @@ if __name__ == '__main__':
     url = r'https://movie.douban.com/subject/6791750/comments'
     html = HtmlDownloader().request_data(url)
 
-    # crawler = DoubanUserCrawler()
-    crawler = DoubanCommentCrawler()
-    # crawler = DoubanMovieCrawler()
-    # print(crawler.get_url(object_type='movie', data_type='comment'))
-    crawler.run_parser(html)
+    # Parser = DoubanUserParser()
+    Parser = DoubanCommentParser()
+    # Parser = DoubanMovieParser()
+    # print(Parser.get_url(object_type='movie', data_type='comment'))
+    Parser.run_parser(html)
