@@ -43,11 +43,28 @@ def get_urls(url_type, style_code=None, limit=None, return_type='map', type='add
         return data
 
 
+def get_url_list(url_type, db_name=None, limit=None, url_status='add'):
+    if not db_name:
+        print('请指定db_name')
+        return []
+    sql = """
+    select url from s_url_manager
+    where url_type = '{url_type}'
+    """.format(url_type=url_type)
+    if url_status == 'add':
+        sql += """ and url_status = 0 """
+    if limit:
+        sql += """ limit {limit} """.format(limit=limit)
+    data = db_map.get(db_name).query(sql)
+    return [item['url'] for item in data]
+
+
+# url管理器
 class UrlManager(object):
 
     def __init__(self, db_name):
         self.table_name = 's_url_manager'
-        self.db_name = None
+        self.db_name = db_name
 
     # 获取url
     @staticmethod
@@ -71,22 +88,25 @@ class UrlManager(object):
         return save_result
 
     # 更新url
-    def update_url(self, url, result=True):
-        """
+    def update_url(self, url, result=True, msg=None):
+        """ 更新url
         :param url:
-        :param result: 两种状态，成功或失败，都要更新
+        :param result: 成功或失败或未知，都要更新
+        :param msg:
         :return:
         """
-        logging.info('更新 %s 状态', url)
-        if result:
-            url_data = [{'url': url, 'url_status': 1}]
+        if result is False:
+            url_status = -1
+        elif result is None:
+            url_status = 0
         else:
-            url_data = [{'url': url, 'url_status': -1}]  # 失败
-        save_result = self.save_url(url_data=url_data, mode=STORE_DATA_UPDATE)
+            url_status = 1
+        logging.info(f'更新 {url} 状态: {url_status}')
+        save_result = self.save_url(url_data=[{'url': url, 'url_status': url_status, 'remark': msg}], mode=STORE_DATA_UPDATE)
         return save_result
 
     def save_url(self, url_data, mode):
-        result, msg = HtmlOutput().save_table_data(table_name=self.table_name, records=url_data, mode=mode)
+        result, msg = HtmlOutput().save_table_data(db_name=self.db_name, table_name=self.table_name, records=url_data, mode=mode, update_conditions=['url'])
         return result
 
 

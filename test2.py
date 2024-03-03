@@ -7,5 +7,7 @@ import sys
 # main()
 #
 d = {'a': 1, 'b': 1, 'c': 3, }
-a, b, c = d.values()
-print(a,b,c)
+key1 = list(d.keys())[0]
+value1 = d.pop(key1)
+print({key1: value1})
+print(d)

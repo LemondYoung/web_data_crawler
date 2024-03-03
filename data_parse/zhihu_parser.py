@@ -49,7 +49,7 @@ class ZhihuParser(object):
         return data_dict
 
     def save_data(self, data_dict):
-        result, result_data = save_table_data(self.table_name, records=data_dict, target_db_name=self.target_db, mode=self.save_mode)
+        result, result_data = save_table_data(self.table_name, records=data_dict, db_name=self.target_db, mode=self.save_mode)
         if result is False or result is None:
             _ = {'length': len(data_dict), 'result_length': None, 'result_data': result_data}
             return [False, _]

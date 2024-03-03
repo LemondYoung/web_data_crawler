@@ -72,10 +72,10 @@ def run_bilibili_video_json_code():
     all_data = []
     for json_path in json_path_list:
         json_obj = read_json_file(json_path)
-        data = get_bilibili_video_json_code(json_obj, return_type=None)
+        data = get_bilibili_video_json_code(json_obj)
         # all_df = pd.concat([all_df, df], ignore_index=True)
         all_data.extend(data)
-    result = save_table_data(table_name='t_video_info', records=all_data, target_db_name='bilibili_data')
+    result = save_table_data(table_name='t_video_info', records=all_data, db_name='bilibili_data')
     # print(all_data)
     return result
 

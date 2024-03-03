@@ -50,7 +50,7 @@ class DoubanParser(object):
         return data_dict
 
     def save_data(self, data_dict):
-        result, result_data = save_table_data(self.table_name, records=data_dict, target_db_name=self.target_db, mode=self.save_mode)
+        result, result_data = save_table_data(self.table_name, records=data_dict, db_name=self.target_db, mode=self.save_mode)
         if result is False or result is None:
             _ = {'length': len(data_dict), 'result_length': None, 'result_data': result_data}
             return [False, _]
@@ -60,17 +60,26 @@ class DoubanParser(object):
             return [True, _]
 
     def run_parser(self, html):
-        data = self.parse_data(html)
+        try:
+            data = self.parse_data(html)
+        except Exception as e:
+            logging.error(f'网页解析失败：{e}')
+            return False, str(e)
 
         # 保存数据
         data_dict = data['data_dict']
+        parser_result = data.get('parser_result')
+        parser_msg = data.get('parser_msg')
+        if parser_result and parser_result is False:
+            logging.error(f'网页解析失败：{parser_msg}')
+            return parser_result, parser_msg
         data_dict = self.transform_data(data_dict)
         self.save_data(data_dict)
         # 新增url
         url_list = data.get('url_list')
         if url_list:
             save_table_data(table_name='s_url_manager', records=url_list)
-        return True
+        return parser_result, parser_msg
 
 
 @douban_parser_map.register(func_name='user')
@@ -119,8 +128,9 @@ class DoubanMovieParser(DoubanParser):
         super().__init__()
         self.table_name = 't_movie_info'
 
-    def parse_data(self, html):
-        html = etree.HTML(html)
+    def parse_data(self, html_source):
+        unknown_msg, error_msg = "", ""
+        html = etree.HTML(html_source)
         # 短评列表
         json_data = html.xpath('//script[@type="application/ld+json"]/text()')[0]
         json_ = json.loads(json_data, strict=False)
@@ -132,55 +142,67 @@ class DoubanMovieParser(DoubanParser):
         # movie_name = html.xpath('//title/text()')[0]
         movie_url = "https://movie.douban.com" + json_['url']
 
-        summary = html.xpath('//div[@id="link-report"]/span[1]/text()')[0]
+        summary_list = html.xpath('//div[@id="link-report-intra"]/span[@class="all hidden"]/text()')
+        summary = '\n'.join([element.strip(' \n') for element in summary_list])  # 沒分段
         info_list = etree.tostring(html.xpath('.//div[@id="info"]')[0], encoding="utf-8", pretty_print=True, method="text").decode("utf-8").split('\n')
-        genres = movie_country = movie_year = movie_length = movie_language = alias = None
+        director = scriptwriter = leading = genres = movie_country = movie_year = movie_length = movie_language = alias = rating = rating_count = None
         for info in info_list:
-            if '类型:' in info:
-                genres = info.split('类型:')[1].strip('')
+            if '导演:' in info:
+                director = info.split('导演:')[1].strip(' ')
+            elif '主演:' in info:
+                leading = info.split('主演:')[1].strip(' ')
+            elif '编剧:' in info:
+                scriptwriter = info.split('编剧:')[1].strip(' ')
+            elif '类型:' in info:
+                genres = info.split('类型:')[1].strip(' ')
             elif '制片国家/地区:' in info:
-                movie_country = info.split('制片国家/地区:')[1].strip('')
+                movie_country = info.split('制片国家/地区:')[1].strip(' ')
             elif '上映日期:' in info:
-                movie_year = info.split('上映日期:')[1].strip('')
+                movie_year = info.split('上映日期:')[1].strip(' ')
             elif '片长:' in info:
-                movie_length = info.split('片长:')[1].strip('')
+                movie_length = info.split('片长:')[1].strip(' ')
             elif '语言:' in info:
-                movie_language = info.split('语言:')[1].strip('')
+                movie_language = info.split('语言:')[1].strip(' ')
             elif '又名:' in info:
-                alias = info.split('又名:')[1].strip('')
-
-
-        movie_score = html.xpath('.//div[@id="interest_sectl"]')[0]
-        rating = movie_score.xpath('.//strong/text()')[0]
-        rating_count = movie_score.xpath('.//a[@class="rating_people"]/span[1]/text()')[0]
-
-        data = {
-            'data_dict': [{
+                alias = info.split('又名:')[1].strip(' ')
+        # 豆瓣评分
+        try:
+            movie_score = html.xpath('.//div[@id="interest_sectl"]')[0]
+            rating = float(movie_score.xpath('.//strong/text()')[0])
+            rating_count = int(movie_score.xpath('.//a[@class="rating_people"]/span[1]/text()')[0])
+        except Exception:
+            unknown_msg += "豆瓣评分获取为空；"
+        data_dict = [{
                 'movie_code': movie_code,
                 'movie_name': movie_names[0],
                 'movie_url': movie_url,
                 'poster_url': poster_url,
-                'rating': float(rating),
-                'rating_count': int(rating_count),
+                'rating': rating,
+                'rating_count': rating_count,
                 # 'wish_count': user_intro,
                 # 'collent_count': user_intro,
+                'director': director,
+                'scriptwriter': scriptwriter,
+                'leading': leading,
                 'movie_year': movie_year,
                 'movie_country': movie_country,
                 'movie_length': movie_length,
                 'movie_language': movie_language,
                 'alias': alias,
                 'genres': genres,
-                'summary': str(summary).strip(' \n'),
+                'summary': summary,
             }]
-        }
+        # 整理解析状态
+        if error_msg:
+            data = {'parse_status': 'fail', 'parse_msg': error_msg+unknown_msg, 'data_dict': data_dict}
+        elif unknown_msg:
+            data = {'parse_status': 'unknown', 'parse_msg': unknown_msg, 'data_dict': data_dict}
+        else:
+            data = {'parse_status': 'success', 'parse_msg': None, 'data_dict': data_dict}
         return data
 
     def transform_data(self, data_dict):
-        new_data = []
-        for item in data_dict:
-            new_data.append(item)
-
-        return new_data
+        return data_dict
 
 
 @douban_parser_map.register(func_name='comment')

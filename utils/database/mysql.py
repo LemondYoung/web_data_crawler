@@ -24,7 +24,8 @@ MAX_ROW_COUNT = 1000
 class Mysql(object):
     INSERT_MODE = 1
     REPLACE_MODE = 2
-    UPDATE_MODE = 3
+    INSERT_UPDATE_MODE = 3
+    UPDATE_MODE = 4
 
     def __init__(self, host, port, user, password, db):
         self.pool = PooledDB(creator=pymysql, mincached=1, maxcached=5,
@@ -86,7 +87,7 @@ class Mysql(object):
         conn.close()
         return cur
 
-    def records_to_db(self, table_name, records, mode=INSERT_MODE, cur=None, conn=None, delete_info=None):
+    def records_to_db(self, table_name, records, mode, cur=None, conn=None, delete_info=None, update_conditions=None):
         """
         批量插入数据到指定表
         :param table_name: 表名
@@ -95,7 +96,9 @@ class Mysql(object):
         :param cur: 如果不提交的话需要传入游标，来确保删除插入是同一个事务
         :param conn: 同上
         :param delete_info: 删除标识（只有INSERT前起作用），='delete',则默认全部删除，否则进行字典解压，获取where条件
-        :return: result入库结果，frame数据（如果失败，则返回具体错误数据详情）
+        :param update_conditions: 更新条件
+        :return:
+            result入库结果，frame数据（如果失败，则返回具体错误数据详情）
         """
         if len(records) == 0:
             logging.warning('入库数据量为0，退出')
@@ -107,25 +110,34 @@ class Mysql(object):
         if mode == self.INSERT_MODE:
             sql = "INSERT INTO `{table_name}` ({columns}) VALUES({values})".format(
                 table_name=table_name,
-                columns=", ".join(["`%s`" % k for k in item.keys()]),
-                values=", ".join(["%({k})s".format(k=k) for k in item.keys()]),
+                columns=", ".join([f"`{k}`" for k in item.keys()]),
+                values=", ".join([f"%({k})s" for k in item.keys()]),
             )
         elif mode == self.REPLACE_MODE:
             sql = "REPLACE INTO `{table_name}` ({columns}) VALUES({values})".format(
                 table_name=table_name,
-                columns=", ".join(["`%s`" % k for k in item.keys()]),
-                values=", ".join(["%({k})s".format(k=k) for k in item.keys()]),
+                columns=", ".join([f"`{k}`" for k in item.keys()]),
+                values=", ".join([f"%({k})s" for k in item.keys()]),
             )
-        elif mode == self.UPDATE_MODE:
+        elif mode == self.INSERT_UPDATE_MODE:
             sql = "INSERT INTO `{table_name}` (%s) VALUES(%s) ON DUPLICATE KEY UPDATE %s".format(table_name=table_name)
             head = []
             mid = []
             tail = []
             for key in item.keys():
-                head.append(" `%s` " % key)
-                mid.append(" %({key})s ".format(key=key))
-                tail.append(" `%s`= VALUES(`%s`)" % (key, key))
+                head.append(f" `{key}` ")
+                mid.append(f" %({key})s ")
+                tail.append(f" `{key}`= VALUES(`{key}`)")
             sql = sql % (",".join(head), ",".join(mid), ",".join(tail))
+        elif mode == self.UPDATE_MODE:
+            # 第一个键值必须为条件，后面是需要更新的键值
+            if not update_conditions:
+                print('没有更新条件？')
+            sql = "UPDATE `{table_name}` SET {update_values} where {condition_values}".format(
+                table_name=table_name,
+                update_values=", ".join([f"`{key}`= %({key})s" for key in item.keys() if key not in update_conditions]),
+                condition_values=", ".join([f"`{key}`= %({key})s" for key in item.keys() if key in update_conditions]),
+            )
         else:
             raise ValueError('mode error.')
 

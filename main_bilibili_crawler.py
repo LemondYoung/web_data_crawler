@@ -264,4 +264,4 @@ if __name__ == '__main__':
         title = item['url_name']
         url_list = [url]
         download_bilibili_video(url_list, dir_path, title=title, is_download_video=True)
-        result = save_table_data(table_name='s_url_manager', records=[{'url': url, 'url_status': 1}], target_db_name='bilibili_data', mode=STORE_DATA_UPDATE)
+        result = save_table_data(table_name='s_url_manager', records=[{'url': url, 'url_status': 1}], db_name='bilibili_data', mode=STORE_DATA_UPDATE, update_conditions=['url'])

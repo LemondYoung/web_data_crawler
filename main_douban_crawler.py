@@ -16,7 +16,7 @@ from urllib import parse
 
 from data_crawler import url_manager
 from data_crawler import html_downloader
-from data_crawler.url_manager import split_urls
+from data_crawler.url_manager import split_urls, get_urls, get_url_list
 from data_parse.douban_parser import douban_parser_map
 from data_parse.parse_tools.url_parse import split_douban_url
 from utils.log import InterceptHandler
@@ -201,24 +201,24 @@ class DoubanCrawlerMain(object):
         logging.warning('策略分配成功，共分为%s组', len(new_urls))
         # 开始爬虫
         windex = 1
-        for index, dic in enumerate(new_urls):
+        for index1, dic in enumerate(new_urls):
             urls, count, sleep = dic.values()
 
             logging.info('%s', '*'*110)
-            logging.info('%s[%s/%s]此次爬取%s条，间隔%ss%s', '*'*50, index, len(new_urls), count, sleep, '*'*50,)
+            logging.info('%s[%s/%s]此次爬取%s条，间隔%ss%s', '*'*50, index1, len(new_urls), count, sleep, '*'*50,)
             logging.info('%s', '*'*110)
             time.sleep(sleep)
-            for j, url in enumerate(urls, 1):
+            for index2, url in enumerate(urls, 1):
                 time.sleep(1)
                 parser_type = split_douban_url(url).get('url_type')
-                logging.warning('%s当前url进度[%s/%s], 总进度[%s/%s] %s', '*'*40, index, len(urls), windex, len(all_url), '*'*40)
+                logging.warning('%s当前url进度[%s/%s], 总进度[%s/%s] %s', '*'*40, index2, len(urls), windex, len(all_url), '*'*40)
                 windex += 1
                 # 1. 获取下载器
                 html = self.htmlDownloader.request_data(url)
                 if html is False:
                     logging.error('网页下载失败')
                     logging.warning(url)
-                    return False
+                    continue
                 self.urlManager.add_url(url)
 
                 # 2. 获取对应的解析器
@@ -228,20 +228,18 @@ class DoubanCrawlerMain(object):
                     return False
                 # 开始解析
                 logging.info('当前解析器为%s', cur_parser)
-                parser_result = cur_parser().run_parser(html=html)
-                if parser_result is False:
-                    logging.error('网页解析失败')
-                    self.urlManager.update_url(url, result=False)
-                    return False
-                self.urlManager.update_url(url, result=True)
+                parser_result, parser_msg = cur_parser().run_parser(html=html)
+                # 更新url
+                self.urlManager.update_url(url, result=parser_result, msg=parser_msg)
 
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
     crawler = DoubanCrawlerMain()
-    # splider.run_crawler()
-    # get_url_list(object_type='user_movie', object_value='', step=20, count=100, status=None, sort='time')
-    # urls = crawler.general_url_list(object_type='movie_comment', object_value='Lion1874', step=10, count=2000, status='P', sort='time')
-    # urls = splider.general_url_list(object_type='movie_comment', object_value='6791750', step=20, count=3000, status='P', sort='new_score')
-    urls = crawler.general_url_list(object_type='top250')
+    # crawler.run_crawler()
+    urls = get_url_list(url_type='movie', db_name='douban_data')
+    # urls = crawler.general_url_list(object_type='movie_comment', object_value='Lion1874', status='P', sort='time')
+    # urls = crawler.general_url_list(object_type='movie_comment', object_value='6791750', status='P', sort='new_score')
+    # urls = crawler.general_url_list(object_type='top250')
+    urls = ['https://movie.douban.com/subject/30244761/']
     crawler.run_crawler(urls)
