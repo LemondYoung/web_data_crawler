@@ -27,7 +27,7 @@ ignore_log_table = []
 
 
 # 保存数据
-def save_table_data(table_name, records, mode=STORE_DATA_REPLACE, db_name='weibo_data', delete_info=None,
+def save_table_data(table_name, records, mode=STORE_DATA_REPLACE, db_name=None, delete_info=None,
                     update_conditions: list = None):
     """
     :param table_name: 目标数据库
@@ -61,5 +61,7 @@ def save_table_data(table_name, records, mode=STORE_DATA_REPLACE, db_name='weibo
                                                delete_info='truncate')
     else:
         raise ValueError('数据入库模式错误，%s' % mode)
+    if result is False:
+        raise ValueError('数据入库失败')
     # 保存状态
     return result, result_data

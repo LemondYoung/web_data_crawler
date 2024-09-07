@@ -15,48 +15,50 @@ from settings import db_map
 from constants import *
 from data_crawler.html_outputer import HtmlOutput
 
+def get_url(url=None, db_name=None, ):
+    sql = f"""
+    select url, url_type, url_status from s_url_manager
+    where 1=1
+    """
+    sql += f""" and url = '{url}' """ if url else ''
+    data = db_map.get(db_name).query(sql)
+    return data
 
 # 从数据库获取不同类型的url
-def get_urls(url_type, style_code=None, limit=None, return_type='map', type='add'):
-    sql = """
+def get_urls(url_type, db_name=None, style_code=None, limit=None, url_status='all'):
+    """ 从url管理器获取url
+    :param url_type:
+    :param db_name:
+    :param style_code:
+    :param limit:
+    :param url_status:  状态：all全部，success成功，fail失败，unknown未知
+    :return:
+    """
+    sql = f"""
     select url_type, url from s_url_manager
     where url_type = '{url_type}'
-    """.format(url_type=url_type)
-    if type == 'add':
-        sql += """ and url_status = 0 """
-    if style_code:
-        sql += """ and style_code = '{style_code}' """.format(style_code=style_code)
-    if limit:
-        sql += """ limit {limit} """.format(limit=limit)
-    data = db_map.get('weibo_data').query(sql)
-    if return_type == 'map':
-        data_map = {}
-        for item in data:
-            if item['url_type'] not in data_map:
-                data_map[item['url_type']] = [item['url']]
-            else:
-                data_map[item['url_type']].append(item['url'])
-        return data_map
-    elif return_type == 'list':
-        return [item['url'] for item in data]
-    else:
-        return data
-
-
-def get_url_list(url_type, db_name=None, limit=None, url_status='add'):
-    if not db_name:
-        print('请指定db_name')
-        return []
-    sql = """
-    select url from s_url_manager
-    where url_type = '{url_type}'
-    """.format(url_type=url_type)
-    if url_status == 'add':
-        sql += """ and url_status = 0 """
-    if limit:
-        sql += """ limit {limit} """.format(limit=limit)
+    """
+    if url_status == 'success':
+        sql += """ and url_status = 1 """
+    elif url_status == 'fail':
+        sql += """ and url_status = -1 """
+    elif url_status == 'unknown':
+        sql += """ and url_status = 2 """
+    sql += f""" and style_code = '{style_code}' """ if style_code else ''
+    sql += f""" limit {limit} """ if limit else ''
     data = db_map.get(db_name).query(sql)
-    return [item['url'] for item in data]
+    return data
+
+def get_url_map(url_type, db_name=None, style_code=None, url_status='all'):
+    url_data = get_urls(url_type, db_name=db_name, style_code=style_code, url_status=url_status)
+    url_map = {item['url_type']: [] for item in url_data}
+    for item in url_data:
+        url_map[item['url_type']].append(item['url'])
+    return url_map
+
+def get_url_list(url_type, db_name=None, style_code=None, url_status='all'):
+    url_data = get_urls(url_type, db_name=db_name, style_code=style_code, url_status=url_status)
+    return [item['url'] for item in url_data]
 
 
 # url管理器
@@ -66,25 +68,45 @@ class UrlManager(object):
         self.table_name = 's_url_manager'
         self.db_name = db_name
 
+    def check_url(self, url):
+        url_data = get_url(url=url, db_name=self.db_name)
+        if not url_data:
+            return None  # url不存在
+        elif len(url_data) == 1 and url_data[0]['url_status'] == 0:
+            return None  # 初始化状态
+        elif len(url_data) == 1 and url_data[0]['url_status'] == 2:
+            return None  # 未知状态
+        elif len(url_data) == 1 and url_data[0]['url_status'] == 1:
+            return True  # 成功
+        elif len(url_data) == 1 and url_data[0]['url_status'] == -1:
+            return False  # 失败
+
     # 获取url
-    @staticmethod
-    def get_all_url(url_type, style_code=None, is_download=None, is_parse=None):
-        url_list = get_urls(url_type, style_code=style_code, return_type='map', type='add')
+    def get_all_url(self, url_type, style_code=None, is_download=None, is_parse=None):
+        url_list = get_url_map(url_type, db_name=self.db_name, style_code=style_code)
         return url_list
 
     # 添加url
-    def add_url(self, url_data):
+    def add_url(self, url_data, is_repeat=False):
         """
-        添加url
+        添加url（只能一条，多了不行）
         :param url_data: list_dict
+        :param is_repeat: 是否检查重复
         :return:
         """
         if url_data is None:
             logging.error('url为空')
             return False
         elif isinstance(url_data, str):
-            url_data = [{'url': url_data}]
-        save_result = self.save_url(url_data=url_data, mode=STORE_DATA_REPLACE)
+            url_data = {'url': url_data}
+        elif isinstance(url_data, dict):  # 必须是list_dict格式，别的不好使
+            pass
+        if is_repeat:  # 检查一下是不是解析过了
+            url_status = self.check_url(url_data['url'])
+            if url_status is True:
+                logging.info(f'该url已经成功解析过了: {url_data["url"]}')
+                return None
+        save_result = self.save_url(url_data=[url_data], mode=STORE_DATA_UPDATE)
         return save_result
 
     # 更新url
@@ -98,14 +120,21 @@ class UrlManager(object):
         if result is False:
             url_status = -1
         elif result is None:
-            url_status = 0
-        else:
+            url_status = 2
+        elif result is True:
             url_status = 1
+        else:
+            url_status = 0
         logging.info(f'更新 {url} 状态: {url_status}')
         save_result = self.save_url(url_data=[{'url': url, 'url_status': url_status, 'remark': msg}], mode=STORE_DATA_UPDATE)
         return save_result
 
     def save_url(self, url_data, mode):
+        """  保存许多url
+        :param url_data:
+        :param mode:
+        :return:
+        """
         result, msg = HtmlOutput().save_table_data(db_name=self.db_name, table_name=self.table_name, records=url_data, mode=mode, update_conditions=['url'])
         return result
 
@@ -149,5 +178,5 @@ def split_urls(urls, strategy="random"):
 
 
 if __name__ == '__main__':
-    dd = get_urls(url_type='img_url', return_type='list')
+    dd = ''
     print(dd)

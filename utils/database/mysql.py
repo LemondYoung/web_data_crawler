@@ -30,7 +30,7 @@ class Mysql(object):
     def __init__(self, host, port, user, password, db):
         self.pool = PooledDB(creator=pymysql, mincached=1, maxcached=5,
                              host=host, port=port, user=user, passwd=password,
-                             db=db, use_unicode=True, cursorclass=pymysql.cursors.DictCursor, charset='utf8')
+                             db=db, use_unicode=True, cursorclass=pymysql.cursors.DictCursor, charset='utf8mb4')
 
     def __str__(self):
         return self.__class__.__name__

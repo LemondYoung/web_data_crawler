@@ -10,15 +10,17 @@
 ==================================================
 """
 import logging
+import os
 import time
 import urllib
 from urllib import parse
 
 from data_crawler import url_manager
-from data_crawler import html_downloader
-from data_crawler.url_manager import split_urls, get_urls, get_url_list
+from data_crawler.html_downloader import HtmlDownloader
+from data_crawler.url_manager import split_urls
 from data_parse.douban_parser import douban_parser_map
 from data_parse.parse_tools.url_parse import split_douban_url
+from settings import HTML_DATA_PATH
 from utils.log import InterceptHandler
 
 logging.basicConfig(handlers=[InterceptHandler()], level=0)
@@ -26,8 +28,9 @@ logging.basicConfig(handlers=[InterceptHandler()], level=0)
 
 class DoubanCrawlerMain(object):
     def __init__(self):
-        self.urlManager = url_manager.UrlManager(db_name='douban_data')
-        self.htmlDownloader = html_downloader.HtmlDownloader()
+        self.db_name = 'douban_data'
+        self.urlManager = url_manager.UrlManager(db_name=self.db_name)
+        self.htmlDownloader = HtmlDownloader()
 
     # 获取要解析的url
     def get_url(self, object_type, object_value, data_type=None, start=0, limit=20, status='P', sort='time' ):
@@ -100,8 +103,9 @@ class DoubanCrawlerMain(object):
         return self.cur_url
 
     # 生成url
-    def general_url_list(self, object_type, object_value=None, status=None, sort=None):
-        """
+    @staticmethod
+    def generate_url_list(object_type, object_value=None, status=None, sort=None):
+        """ 生成豆瓣相关的url列表
         @电影评论 movie_comment: get_url_list(object_type='movie_comment', object_value='6791750', status='P', sort='time')
         @用户电影 user_movie: get_url_list(object_type='user_movie', object_value='', status=None, sort='time')
         @top250 top250: get_url_list(object_type='top250')
@@ -150,7 +154,7 @@ class DoubanCrawlerMain(object):
             sort = sort or 'time'
             count, step = 2000, 15
             list_list = [[start, step] for start in list(range(0, count))[0::step]]  # 指定长度和步长
-
+            logging.info(f"准备生成url，规则{object_type}，总数{count}，每页{step}个")
             url_list = []
             base_url = urllib.parse.urljoin('https://movie.douban.com/people/', object_value) + '/collect'
             for start, step in list_list:
@@ -182,26 +186,31 @@ class DoubanCrawlerMain(object):
 
         return url_list
 
-    # 入口函数
-    def run_crawler(self, urls_list=None):
-        if not urls_list:
-            url_value = 'anasshole'
-            url = self.get_url(object_type='user_movie', object_value=url_value)
-            add_result = self.urlManager.add_url(url)
-            if add_result is False:
-                logging.error('url添加失败')
-                return False
+    def get_demo_urls(self):
+        url_value = 'anasshole'
+        url = self.get_url(object_type='user_movie', object_value=url_value)
+        add_result = self.urlManager.add_url(url)
+        if add_result is False:
+            logging.error('url添加失败')
+            return False
+        all_url = self.urlManager.get_all_url(url_type='user_movie', is_download=False, is_parse=False)
+        return all_url
 
-            all_url = self.urlManager.get_all_url(is_download=False, is_parse=False)
-        else:
-            all_url = urls_list
+    # 入口函数
+    def run_crawler(self, urls_list=None, is_repeat=True):
+        """ 运行爬虫
+        :param urls_list: url列表，如果没有的话，需要。。。
+        :param is_repeat: 是否重复爬取（检查url管理表）
+        :return:
+        """
+        all_url = urls_list or self.get_demo_urls()
         # 设置间隔策略
         logging.info('获取到url总数%s，开始设置策略', len(all_url))
         new_urls = split_urls(all_url, strategy="random")
         logging.warning('策略分配成功，共分为%s组', len(new_urls))
-        # 开始爬虫
+        # 开始爬虫（分为两层，有一定的间隔策略）
         windex = 1
-        for index1, dic in enumerate(new_urls):
+        for index1, dic in enumerate(new_urls, 1):
             urls, count, sleep = dic.values()
 
             logging.info('%s', '*'*110)
@@ -210,25 +219,31 @@ class DoubanCrawlerMain(object):
             time.sleep(sleep)
             for index2, url in enumerate(urls, 1):
                 time.sleep(1)
-                parser_type = split_douban_url(url).get('url_type')
+                parser_type = split_douban_url(url).get('url_type')  # 获取解析器类型
                 logging.warning('%s当前url进度[%s/%s], 总进度[%s/%s] %s', '*'*40, index2, len(urls), windex, len(all_url), '*'*40)
                 windex += 1
+                # 检查一下目标url，并入库保存
+                add_result = self.urlManager.add_url({'url': url, 'url_type': parser_type}, is_repeat)
+                if add_result is None:
+                    logging.info('url无需解析，跳过')
+                    continue
+
                 # 1. 获取下载器
                 html = self.htmlDownloader.request_data(url)
+                # html_file = os.path.join(HTML_DATA_PATH, 'douban', 'user_251679774.html')
+                # html = self.htmlDownloader.read_local_html_file(html_file)
                 if html is False:
-                    logging.error('网页下载失败')
-                    logging.warning(url)
-                    continue
-                self.urlManager.add_url(url)
-
-                # 2. 获取对应的解析器
-                cur_parser = douban_parser_map.get(parser_type)
-                if not cur_parser:
-                    logging.error('%s无对应的解析器', parser_type)
-                    return False
-                # 开始解析
-                logging.info('当前解析器为%s', cur_parser)
-                parser_result, parser_msg = cur_parser().run_parser(html=html)
+                    parser_result, parser_msg = False, '网页下载失败'
+                    logging.error(f"网页下载失败: {url}")
+                else:
+                    # 2. 获取对应的解析器
+                    cur_parser = douban_parser_map.get(parser_type)
+                    if not cur_parser:
+                        logging.error(f'当前解析类型{parser_type}无对应的解析器')
+                        return False
+                    # 开始解析
+                    logging.info(f'当前解析类型为：{parser_type}，对应解析器：{cur_parser}', )
+                    parser_result, parser_msg = cur_parser().run_parser(html=html)
                 # 更新url
                 self.urlManager.update_url(url, result=parser_result, msg=parser_msg)
 
@@ -237,9 +252,12 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
     crawler = DoubanCrawlerMain()
     # crawler.run_crawler()
-    urls = get_url_list(url_type='movie', db_name='douban_data')
-    # urls = crawler.general_url_list(object_type='movie_comment', object_value='Lion1874', status='P', sort='time')
-    # urls = crawler.general_url_list(object_type='movie_comment', object_value='6791750', status='P', sort='new_score')
-    # urls = crawler.general_url_list(object_type='top250')
-    urls = ['https://movie.douban.com/subject/30244761/']
-    crawler.run_crawler(urls)
+    # urls = get_url_list(url_type='movie', db_name='douban_data')
+    # urls = crawler.generate_url_list(object_type='movie_comment', object_value='Lion1874', status='P', sort='time')
+    urls = crawler.generate_url_list(object_type='user_movie', object_value='Lion1874', status='P', sort='time')
+    # urls = crawler.generate_url_list(object_type='user_movie', object_value='anasshole', status='P', sort='time')
+    # urls = crawler.generate_url_list(object_type='user_movie', object_value='251679774', status='P', sort='time')
+    # urls = crawler.generate_url_list(object_type='movie_comment', object_value='1291546', status='P', sort='new_score')
+    # urls = crawler.generate_url_list(object_type='top250')
+    # urls = ['https://www.douban.com/people/251679774']
+    crawler.run_crawler(urls, is_repeat=False)

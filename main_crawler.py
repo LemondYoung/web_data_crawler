@@ -16,7 +16,7 @@ import time
 from config import parser_map
 from data_crawler.html_downloader import HtmlDownloader
 from data_crawler.html_outputer import HtmlOutput
-from data_crawler.url_manager import UrlManager, get_urls
+from data_crawler.url_manager import UrlManager, get_urls, get_url_list
 from data_sync.data_extract.weibo_data import get_poetry_img
 from settings import COOKIE
 from utils.computer.dir import Dir
@@ -145,12 +145,12 @@ class CrawlerMain(object):
         """
         logging.info('解析类型为%s', parser_type)
         if parser_type == 'img_url':
-            urls = get_urls(url_type='img', style_code='original', return_type='list', type='add') if not urls or len(urls) == 0 else urls
+            urls = get_url_list(url_type='img', style_code='original', url_status='add') if not urls or len(urls) == 0 else urls
             self.run_crawler(parser_type=parser_type, urls_list=urls, style=style, download_type=parser_type, **kwargs)
         if parser_type == 'img_path':
             self.run_crawler(parser_type=parser_type, urls_list=urls, style=style, download_type=parser_type, **kwargs)
         else:
-            urls = get_urls(url_type='blog', style_code=None, return_type='list', type='add') if not urls or len(urls) == 0 else urls
+            urls = get_url_list(url_type='blog', style_code=None, url_status='add') if not urls or len(urls) == 0 else urls
             self.run_crawler(parser_type=parser_type, urls_list=urls, style=style, **kwargs)
 
 

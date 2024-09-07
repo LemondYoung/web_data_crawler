@@ -24,8 +24,9 @@ from data_parse.parse_tools.date_parse import standardize_date
 from data_parse.parse_tools.url_parse import split_douban_url, split_url
 from data_sync.data_load.mysql_data_load import save_table_data
 from utils.class_tool.register_class import ParserRegister, DoubanParserRegister
+from abc import ABC, abstractmethod
 
-# 获取解析器
+# 解析器，注册
 douban_parser_map = DoubanParserRegister()
 
 
@@ -43,21 +44,28 @@ class DoubanParser(object):
         self.target_db = 'douban_data'
         self.save_mode = STORE_DATA_REPLACE
 
-    def parse_data(self, html):
+    @abstractmethod
+    def parse_data(self, html) -> dict:
+        """ 解析网页数据
+        :param html: 接收原始网页
+        :return:
+        """
         pass
 
     def transform_data(self, data_dict):
         return data_dict
 
     def save_data(self, data_dict):
+        if len(data_dict) == 0:
+            return None, {}
         result, result_data = save_table_data(self.table_name, records=data_dict, db_name=self.target_db, mode=self.save_mode)
         if result is False or result is None:
-            _ = {'length': len(data_dict), 'result_length': None, 'result_data': result_data}
-            return [False, _]
+            result_dict = {'length': len(data_dict), 'result_length': None, 'result_data': result_data}
+            return False, result_dict
         else:
-            logging.info('计划执行数据量%s，已执行数据量为%s', len(data_dict), result)
-            _ = {'length': len(data_dict), 'result_length': result, 'result_data': result_data}
-            return [True, _]
+            logging.info(f'【保存数据】目标表{self.table_name}，计划执行数据量{len(data_dict)}，已执行数据量为{result}')
+            result_dict = {'length': len(data_dict), 'result_length': result, 'result_data': result_data}
+            return True, result_dict
 
     def run_parser(self, html):
         try:
@@ -68,17 +76,22 @@ class DoubanParser(object):
 
         # 保存数据
         data_dict = data['data_dict']
-        parser_result = data.get('parser_result')
-        parser_msg = data.get('parser_msg')
-        if parser_result and parser_result is False:
-            logging.error(f'网页解析失败：{parser_msg}')
+        parser_result = data.get('parse_status')
+        parser_msg = data.get('parse_msg')
+        url_list = data.get('url_list', [])        # 新增url
+
+        logging.info(f'【解析数据】结果：{parser_result}，解析数量{len(data_dict)}，解析消息：{parser_msg}，新增url数量{len(url_list)}')
+        if parser_result == False:
+            logging.error(f'网页数据解析失败：{parser_msg}')
+            return parser_result, parser_msg
+        elif parser_result == None:
+            logging.warning(f'网页数据解析未知：{parser_msg}')
             return parser_result, parser_msg
         data_dict = self.transform_data(data_dict)
         self.save_data(data_dict)
-        # 新增url
-        url_list = data.get('url_list')
+
         if url_list:
-            save_table_data(table_name='s_url_manager', records=url_list)
+            save_table_data(db_name=self.target_db, table_name='s_url_manager', records=url_list)
         return parser_result, parser_msg
 
 
@@ -89,23 +102,25 @@ class DoubanUserParser(DoubanParser):
         super(DoubanUserParser, self).__init__()
         self.table_name = 't_user_info'
 
-    def parse_data(self, html):
-        html = etree.HTML(html)
+    def parse_data(self, ori_html):
+        html = etree.HTML(ori_html)
         # 短评列表
         user_url = str(html.xpath('//div[@id="db-usr-profile"]/div[@class="pic"]/a/@href')[0])
         user_code = split_url(url=user_url).get('path')[1]
         user_name = str(html.xpath('//div[@id="db-usr-profile"]/div[@class="info"]/h1/text()')[0])
         user_profile = html.xpath('//div[@id="profile"]')[0]
-        user_address = str(user_profile.xpath('.//div[@class="user-info"]/a/text()')[0])
         user_join_date = str(user_profile.xpath('.//div[@class="user-info"]/div[@class="pl"]/text()')[1])
+        user_address = str(user_profile.xpath('.//div[@class="user-info"]/div/span[@class="ip-location"]/text()')[0])
         user_intro = str(user_profile.xpath('.//span[@id="intro_display"]/text()')[0])
         data = {
+            'parse_status': True,
+            'parse_msg': None,
             'data_dict': {
                 'user_code': user_code,
-                'user_name': user_name,
+                'user_name': user_name.strip(' \n'),
                 'user_url': user_url,
-                'user_area': user_address,
-                'join_date': user_join_date,
+                'user_area': user_address.strip(' \n'),
+                'join_date': user_join_date.strip(' \n'),
                 'intro': user_intro,
             }
         }
@@ -194,18 +209,18 @@ class DoubanMovieParser(DoubanParser):
             }]
         # 整理解析状态
         if error_msg:
-            data = {'parse_status': 'fail', 'parse_msg': error_msg+unknown_msg, 'data_dict': data_dict}
+            data = {'parse_status': False, 'parse_msg': error_msg+unknown_msg, 'data_dict': data_dict}
         elif unknown_msg:
-            data = {'parse_status': 'unknown', 'parse_msg': unknown_msg, 'data_dict': data_dict}
+            data = {'parse_status': None, 'parse_msg': unknown_msg, 'data_dict': data_dict}
         else:
-            data = {'parse_status': 'success', 'parse_msg': None, 'data_dict': data_dict}
+            data = {'parse_status': True, 'parse_msg': None, 'data_dict': data_dict}
         return data
 
     def transform_data(self, data_dict):
         return data_dict
 
 
-@douban_parser_map.register(func_name='comment')
+@douban_parser_map.register(func_name='movie_comment')
 class DoubanCommentParser(DoubanParser):
 
     def __init__(self):
@@ -241,7 +256,9 @@ class DoubanCommentParser(DoubanParser):
             }
             new_comment_list.append(comment_item)
         data = {
-            'data_dict': new_comment_list
+            'parse_status': True,
+            'parse_msg': None,
+            'data_dict': new_comment_list,
         }
         return data
 
@@ -277,14 +294,13 @@ class DoubanUserMovieParser(DoubanParser):
         self.table_name = 't_user_movie'
 
     def parse_data(self, html1):
-        # html2 = """{html}""".format(html=html)
         html = etree.HTML(html1)
-        # result = etree.tostring(html1, encoding='utf-8')  # 解析对象输出代码
-        # result1 = result.decode('utf-8')
         sub_url = str(html.xpath('//div[@id="db-usr-profile"]/div[@class="pic"]/a/@href')[0])
         user_code = sub_url.split('/')[2]
         # 短评列表
         movie_list = html.xpath('//div[@class="grid-view"]/div[@class="item comment-item"]')
+        if len(movie_list) == 0:
+            return {'parse_status': None, 'parse_msg': '该页面无用户电影信息', 'data_dict': []}
         new_movie_list = []
         url_list = []
         for movie in movie_list:
@@ -292,43 +308,34 @@ class DoubanUserMovieParser(DoubanParser):
             info_li = movie.xpath('.//div[@class="info"]/ul/li')
             temp = etree.tostring(movie.xpath('.//div[@class="info"]/ul')[0], encoding='utf-8').decode('utf-8')
             try:
-                if len(info_li) >= 3:  # 日期和评分
+                if len(info_li) >= 3:  # 有评论日期
                     movie_start = movie.xpath('.//div[@class="info"]/ul/li[3]/span[1]/@class')[0]
                     comment_date = movie.xpath('.//div[@class="info"]/ul/li[3]/span[@class="date"]/text()')[0]
                     # comment_tag = movie.xpath('.//div[@class="info"]/ul/li[3]/span[3]/text()')[0]
-                    if len(info_li) >= 4:  # 评论
-                        comment = movie.xpath('.//div[@class="info"]/ul/li[4]/span[1]/text()')[0]
-                    else:
-                        logging.warning('%s的评论解析为空, 未标注评论日期或分数', movie_url)
-                        comment = None
                 else:
                     logging.warning('%s的日期和评论解析为空, 未评论', movie_url)
-                    movie_start = comment_date = comment = None
+                    movie_start = comment_date = None
+                if len(info_li) >= 4:  # 有评论内容
+                    comment_content = movie.xpath('.//div[@class="info"]/ul/li[4]/span[1]/text()')[0]
+                else:
+                    comment_content = None
             except Exception as e:
                 logging.error('%s的评论解析失败，其他原因%s %s', movie_url, e, temp)
                 continue
-                # try:
-                #     _ = movie.xpath('.//div[@class="info"]/ul/li')
-                #     if len(_) == 4:  # 评论在第四个li
-                #         comment = movie.xpath('.//div[@class="info"]/ul/li[4]/span[1]/text()')[0]
-                #     else:
-                #         temp = etree.tostring(_, encoding='utf-8').decode('utf-8')
-                #         comment = None
-                #         logging.error('li长度不够%s', temp)
-                # except Exception as e:
-                #     logging.error('%s的评论解析失败, 其他原因%s', movie_url, e)
-                #     comment = None
+
             comment_item = {
                 'user_code': user_code,
                 'movie_url': str(movie_url),
                 'comment_score': str(movie_start),
                 'comment_date': str(comment_date),
                 # 'comment_tag': comment_tag,
-                'comment_content': str(comment),
+                'comment_content': str(comment_content) if comment_content is not None else None,
             }
             new_movie_list.append(comment_item)
             url_list.append({'url': movie_url, 'url_type': 'movie'})
         data = {
+            'parse_status': True,
+            'parse_msg': None,
             'data_dict': new_movie_list,
             'url_list': url_list,
         }
@@ -359,9 +366,9 @@ class DoubanTop250Parser(DoubanParser):
         super().__init__()
         self.table_name = 't_movie_top250'
 
-    def parse_data(self, html1):
+    def parse_data(self, ori_html):
         # html2 = """{html}""".format(html=html)
-        html = etree.HTML(html1)
+        html = etree.HTML(ori_html)
         movie_list = html.xpath('//ol[@class="grid_view"]/li/div[@class="item"]')
         data = []
         url_list = []
@@ -385,6 +392,8 @@ class DoubanTop250Parser(DoubanParser):
             data.append(movie_item)
             url_list.append({'url': movie_url, 'url_type': 'movie'})
         return {
+            'parse_status': True,
+            'parse_msg': None,
             'data_dict': data,
             'url_list': url_list,
         }
