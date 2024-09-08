@@ -63,13 +63,17 @@ class ZhihuParser(object):
 
         # 保存数据
         data_dict = data['data_dict']
+        parser_result = data.get('parse_status')
+        parser_msg = data.get('parse_msg')
         data_dict = self.transform_data(data_dict)
         self.save_data(data_dict)
+
         # 新增url
         url_list = data.get('url_list')
         if url_list:
-            save_table_data(table_name='s_url_manager', records=url_list)
-        return True
+            # 保存新增url，格式为update，避免覆盖已经存在的url
+            save_table_data(db_name=self.target_db, table_name='s_url_manager', records=url_list, mode=STORE_DATA_UPDATE)
+        return parser_result, parser_msg
 
 
 @zhihu_parser_map.register(func_name='question')
@@ -82,12 +86,16 @@ class ZhihuQuestionParser(ZhihuParser):
     def parse_data(self, data):
         json_data = json.loads(data)
         data_list = json_data['data']
-        session = json_data['session']['id']
+        session = json_data.get('session')
         next_url = json_data['paging']['next']
+        url_list = [next_url]
         print(1)
         return {
-            'data_dict': {
-            }
+            'parse_status': True,
+            'parse_msg': '解析成功',
+            'data_dict': [{
+            }],
+            'url_list': url_list,
         }
 
 

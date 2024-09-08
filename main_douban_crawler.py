@@ -217,16 +217,17 @@ class DoubanCrawlerMain(object):
             logging.info('%s[%s/%s]此次爬取%s条，间隔%ss%s', '*'*50, index1, len(new_urls), count, sleep, '*'*50,)
             logging.info('%s', '*'*110)
             for index2, url in enumerate(urls, 1):
-                parser_type = split_douban_url(url).get('url_type')  # 获取解析器类型
                 logging.warning('%s当前url进度[%s/%s], 总进度[%s/%s] %s', '*'*40, index2, len(urls), windex, len(all_url), '*'*40)
                 windex += 1
-                # 检查一下目标url，并入库保存
+
+                # 1. 分析并检查url
+                parser_type = split_douban_url(url).get('url_type')
                 add_result = self.urlManager.add_url({'url': url, 'url_type': parser_type}, is_run_all)
                 if add_result is None:
                     logging.info('url无需解析，跳过')
                     continue
 
-                # 1. 获取下载器
+                # 2. 获取下载器
                 html = self.htmlDownloader.request_data(url)
                 # html_file = os.path.join(HTML_DATA_PATH, 'douban', 'user_251679774.html')
                 # html = self.htmlDownloader.read_local_html_file(html_file)
@@ -234,15 +235,14 @@ class DoubanCrawlerMain(object):
                     parser_result, parser_msg = False, '网页下载失败'
                     logging.error(f"网页下载失败: {url}")
                 else:
-                    # 2. 获取对应的解析器
+                    # 3. 获取对应的解析器，开始解析
                     cur_parser = douban_parser_map.get(parser_type)
                     if not cur_parser:
                         logging.error(f'当前解析类型{parser_type}无对应的解析器')
                         return False
-                    # 开始解析
                     logging.info(f'当前解析类型为：{parser_type}，对应解析器：{cur_parser}', )
                     parser_result, parser_msg = cur_parser().run_parser(html=html)
-                # 更新url
+                # 4. 更新url
                 self.urlManager.update_url(url, result=parser_result, msg=parser_msg)
                 time.sleep(1)  # 停顿一会会，防止被封ip
             time.sleep(sleep)
