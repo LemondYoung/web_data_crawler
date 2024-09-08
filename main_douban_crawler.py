@@ -17,7 +17,7 @@ from urllib import parse
 
 from data_crawler import url_manager
 from data_crawler.html_downloader import HtmlDownloader
-from data_crawler.url_manager import split_urls
+from data_crawler.url_manager import split_urls, get_url_list
 from data_parse.douban_parser import douban_parser_map
 from data_parse.parse_tools.url_parse import split_douban_url
 from settings import HTML_DATA_PATH
@@ -197,10 +197,10 @@ class DoubanCrawlerMain(object):
         return all_url
 
     # 入口函数
-    def run_crawler(self, urls_list=None, is_repeat=True):
+    def run_crawler(self, urls_list=None, is_run_all=True):
         """ 运行爬虫
         :param urls_list: url列表，如果没有的话，需要。。。
-        :param is_repeat: 是否重复爬取（检查url管理表）
+        :param is_run_all: 是否全部运行（检查url管理表）
         :return:
         """
         all_url = urls_list or self.get_demo_urls()
@@ -216,14 +216,12 @@ class DoubanCrawlerMain(object):
             logging.info('%s', '*'*110)
             logging.info('%s[%s/%s]此次爬取%s条，间隔%ss%s', '*'*50, index1, len(new_urls), count, sleep, '*'*50,)
             logging.info('%s', '*'*110)
-            time.sleep(sleep)
             for index2, url in enumerate(urls, 1):
-                time.sleep(1)
                 parser_type = split_douban_url(url).get('url_type')  # 获取解析器类型
                 logging.warning('%s当前url进度[%s/%s], 总进度[%s/%s] %s', '*'*40, index2, len(urls), windex, len(all_url), '*'*40)
                 windex += 1
                 # 检查一下目标url，并入库保存
-                add_result = self.urlManager.add_url({'url': url, 'url_type': parser_type}, is_repeat)
+                add_result = self.urlManager.add_url({'url': url, 'url_type': parser_type}, is_run_all)
                 if add_result is None:
                     logging.info('url无需解析，跳过')
                     continue
@@ -246,18 +244,29 @@ class DoubanCrawlerMain(object):
                     parser_result, parser_msg = cur_parser().run_parser(html=html)
                 # 更新url
                 self.urlManager.update_url(url, result=parser_result, msg=parser_msg)
+                time.sleep(1)  # 停顿一会会，防止被封ip
+            time.sleep(sleep)
 
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
     crawler = DoubanCrawlerMain()
-    # crawler.run_crawler()
-    # urls = get_url_list(url_type='movie', db_name='douban_data')
+
+    # 爬取电影 movie
+    # urls = get_url_list(url_type='movie', db_name='douban_data', url_status='init')
+
+    # 爬取电影评论 movie_comment
     # urls = crawler.generate_url_list(object_type='movie_comment', object_value='Lion1874', status='P', sort='time')
-    urls = crawler.generate_url_list(object_type='user_movie', object_value='Lion1874', status='P', sort='time')
+    # urls = crawler.generate_url_list(object_type='movie_comment', object_value='1291546', status='P', sort='new_score')
+
+    # 爬取用户电影 user_movie
+    # urls = crawler.generate_url_list(object_type='user_movie', object_value='Lion1874', status='P', sort='time')
     # urls = crawler.generate_url_list(object_type='user_movie', object_value='anasshole', status='P', sort='time')
     # urls = crawler.generate_url_list(object_type='user_movie', object_value='251679774', status='P', sort='time')
-    # urls = crawler.generate_url_list(object_type='movie_comment', object_value='1291546', status='P', sort='new_score')
+
+    # 爬取电影 top250
     # urls = crawler.generate_url_list(object_type='top250')
-    # urls = ['https://www.douban.com/people/251679774']
-    crawler.run_crawler(urls, is_repeat=False)
+
+    # 指定爬取内容
+    urls = ['https://movie.douban.com/subject/4769314/','https://movie.douban.com/subject/3286543/','https://movie.douban.com/subject/3286538/','https://movie.douban.com/subject/3286528/','https://movie.douban.com/subject/3286552/']
+    crawler.run_crawler(urls, is_run_all=True)

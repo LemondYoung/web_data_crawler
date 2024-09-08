@@ -15,6 +15,7 @@ from settings import db_map
 from constants import *
 from data_crawler.html_outputer import HtmlOutput
 
+
 def get_url(url=None, db_name=None, ):
     sql = f"""
     select url, url_type, url_status from s_url_manager
@@ -24,14 +25,15 @@ def get_url(url=None, db_name=None, ):
     data = db_map.get(db_name).query(sql)
     return data
 
+
 # 从数据库获取不同类型的url
 def get_urls(url_type, db_name=None, style_code=None, limit=None, url_status='all'):
     """ 从url管理器获取url
-    :param url_type:
-    :param db_name:
-    :param style_code:
-    :param limit:
-    :param url_status:  状态：all全部，success成功，fail失败，unknown未知
+    :param url_type: url的类型，如book、movie、music
+    :param db_name: 数据库名称
+    :param style_code:  分类代码
+    :param limit:  限制数量
+    :param url_status:  状态：all全部，success成功，fail失败，unknown未知, init初始化
     :return:
     """
     sql = f"""
@@ -43,20 +45,30 @@ def get_urls(url_type, db_name=None, style_code=None, limit=None, url_status='al
     elif url_status == 'fail':
         sql += """ and url_status = -1 """
     elif url_status == 'unknown':
-        sql += """ and url_status = 2 """
+        sql += """ and url_status in (0, 2) """
+    elif url_status == 'init':
+        sql += """ and url_status = 0 """
     sql += f""" and style_code = '{style_code}' """ if style_code else ''
     sql += f""" limit {limit} """ if limit else ''
     data = db_map.get(db_name).query(sql)
     return data
 
+
 def get_url_map(url_type, db_name=None, style_code=None, url_status='all'):
+    """
+    :param url_status:  状态：all全部，success成功，fail失败，unknown未知, init初始化
+    """
     url_data = get_urls(url_type, db_name=db_name, style_code=style_code, url_status=url_status)
     url_map = {item['url_type']: [] for item in url_data}
     for item in url_data:
         url_map[item['url_type']].append(item['url'])
     return url_map
 
+
 def get_url_list(url_type, db_name=None, style_code=None, url_status='all'):
+    """
+    :param url_status:  状态：all全部，success成功，fail失败，unknown未知, init初始化
+    """
     url_data = get_urls(url_type, db_name=db_name, style_code=style_code, url_status=url_status)
     return [item['url'] for item in url_data]
 
@@ -87,11 +99,11 @@ class UrlManager(object):
         return url_list
 
     # 添加url
-    def add_url(self, url_data, is_repeat=False):
+    def add_url(self, url_data, is_run_all=False):
         """
         添加url（只能一条，多了不行）
         :param url_data: list_dict
-        :param is_repeat: 是否检查重复
+        :param is_run_all: 是否全部运行
         :return:
         """
         if url_data is None:
@@ -101,7 +113,7 @@ class UrlManager(object):
             url_data = {'url': url_data}
         elif isinstance(url_data, dict):  # 必须是list_dict格式，别的不好使
             pass
-        if is_repeat:  # 检查一下是不是解析过了
+        if is_run_all is False:  # 检查一下是不是解析过了
             url_status = self.check_url(url_data['url'])
             if url_status is True:
                 logging.info(f'该url已经成功解析过了: {url_data["url"]}')

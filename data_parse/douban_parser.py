@@ -11,6 +11,7 @@
 """
 import json
 import logging, datetime
+import re
 import urllib
 from urllib import parse
 
@@ -81,17 +82,18 @@ class DoubanParser(object):
         url_list = data.get('url_list', [])        # 新增url
 
         logging.info(f'【解析数据】结果：{parser_result}，解析数量{len(data_dict)}，解析消息：{parser_msg}，新增url数量{len(url_list)}')
-        if parser_result == False:
+        if parser_result is False:
             logging.error(f'网页数据解析失败：{parser_msg}')
             return parser_result, parser_msg
-        elif parser_result == None:
+        elif parser_result is None:
             logging.warning(f'网页数据解析未知：{parser_msg}')
             return parser_result, parser_msg
         data_dict = self.transform_data(data_dict)
         self.save_data(data_dict)
 
         if url_list:
-            save_table_data(db_name=self.target_db, table_name='s_url_manager', records=url_list)
+            # 保存新增url，格式为update，避免覆盖已经存在的url
+            save_table_data(db_name=self.target_db, table_name='s_url_manager', records=url_list, mode=STORE_DATA_UPDATE)
         return parser_result, parser_msg
 
 
@@ -152,15 +154,23 @@ class DoubanMovieParser(DoubanParser):
         poster_url = json_['image']
         movie_code = json_['url'].split('/')[2]
 
-        movie_names = json_['name'].split(' ')
-        movie_year = json_['datePublished']
-        # movie_name = html.xpath('//title/text()')[0]
+        # movie_names = json_['name'].split(' ')
+        # 正则表达式解析中文名称
+        movie_name_str = json_['name']
+        match = re.match(r'[\u4e00-\u9fff\s]+', movie_name_str)
+        if match:
+            movie_name = match.group(0).strip()  # 提取并去除多余的空格
+            other_name = movie_name_str[len(movie_name):].strip()  # 提取其余部分并去除空格
+        else:
+            movie_name = json_['name'].split(' ')[0].strip()  # 取第一个单词作为中文名称
+            other_name = ''
+
         movie_url = "https://movie.douban.com" + json_['url']
 
         summary_list = html.xpath('//div[@id="link-report-intra"]/span[@class="all hidden"]/text()')
         summary = '\n'.join([element.strip(' \n') for element in summary_list])  # 沒分段
         info_list = etree.tostring(html.xpath('.//div[@id="info"]')[0], encoding="utf-8", pretty_print=True, method="text").decode("utf-8").split('\n')
-        director = scriptwriter = leading = genres = movie_country = movie_year = movie_length = movie_language = alias = rating = rating_count = None
+        director = scriptwriter = leading = genres = movie_country = movie_year_str = movie_length = movie_language = alias = score = score_number = None
         for info in info_list:
             if '导演:' in info:
                 director = info.split('导演:')[1].strip(' ')
@@ -172,28 +182,35 @@ class DoubanMovieParser(DoubanParser):
                 genres = info.split('类型:')[1].strip(' ')
             elif '制片国家/地区:' in info:
                 movie_country = info.split('制片国家/地区:')[1].strip(' ')
-            elif '上映日期:' in info:
-                movie_year = info.split('上映日期:')[1].strip(' ')
+            elif '上映日期:' in info :
+                movie_year_str = info.split('上映日期:')[1].strip(' ').split('(')[0]
+            elif '首播:' in info :
+                movie_year_str = info.split('首播:')[1].strip(' ').split('(')[0]
             elif '片长:' in info:
                 movie_length = info.split('片长:')[1].strip(' ')
             elif '语言:' in info:
                 movie_language = info.split('语言:')[1].strip(' ')
             elif '又名:' in info:
                 alias = info.split('又名:')[1].strip(' ')
+            try:
+                movie_year = datetime.datetime.strptime(movie_year_str, '%Y-%m-%d').date()
+            except Exception as e:
+                movie_year = None
         # 豆瓣评分
         try:
             movie_score = html.xpath('.//div[@id="interest_sectl"]')[0]
-            rating = float(movie_score.xpath('.//strong/text()')[0])
-            rating_count = int(movie_score.xpath('.//a[@class="rating_people"]/span[1]/text()')[0])
+            score = float(movie_score.xpath('.//strong/text()')[0])
+            score_number = int(movie_score.xpath('.//a[@class="rating_people"]/span[1]/text()')[0])
         except Exception:
             unknown_msg += "豆瓣评分获取为空；"
         data_dict = [{
                 'movie_code': movie_code,
-                'movie_name': movie_names[0],
+                'movie_name': movie_name,
+                'movie_name2': other_name,
                 'movie_url': movie_url,
                 'poster_url': poster_url,
-                'rating': rating,
-                'rating_count': rating_count,
+                'score': score,
+                'score_number': score_number,
                 # 'wish_count': user_intro,
                 # 'collent_count': user_intro,
                 'director': director,
@@ -239,9 +256,9 @@ class DoubanCommentParser(DoubanParser):
             comment_user = str(comment.xpath('.//span[@class="comment-info"]/a/text()')[0])
             comment_user_url = str(comment.xpath('.//span[@class="comment-info"]/a/@href')[0])
             if len(comment.xpath('.//span[@class="comment-info"]/span')) == 3:
-                comment_rating = str(comment.xpath('.//span[@class="comment-info"]/span[2]/@title')[0])
+                comment_score = str(comment.xpath('.//span[@class="comment-info"]/span[2]/@title')[0])
             else:
-                comment_rating = None
+                comment_score = None
             comment_time = str(comment.xpath('.//span[@class="comment-info"]/span[@class="comment-time "]/@title')[0])
             comment_content = str(comment.xpath('.//span[@class="short"]/text()')[0])
             vote_count = int(comment.xpath('.//span[@class="comment-vote"]/span[1]/text()')[0])
@@ -249,7 +266,7 @@ class DoubanCommentParser(DoubanParser):
                 'movie_code': movie_code,
                 'user_name': comment_user,
                 'user_url': comment_user_url,
-                'comment_score': comment_rating,
+                'comment_score': comment_score,
                 'comment_date_time': comment_time,
                 'comment_content': comment_content,
                 'vote_count': vote_count,
@@ -376,7 +393,7 @@ class DoubanTop250Parser(DoubanParser):
             rank = movie.xpath('./div[@class="pic"]/em/text()')[0]
             movie_url = movie.xpath('./div[@class="info"]/div[@class="hd"]/a/@href')[0]
             movie_name = movie.xpath('./div[@class="info"]/div[@class="hd"]/a/span[@class="title"]/text()')[0]
-            star = movie.xpath('./div[@class="info"]/div[@class="bd"]/div[@class="star"]/span[@class="rating_num"]/text()')[0]
+            score = movie.xpath('./div[@class="info"]/div[@class="bd"]/div[@class="star"]/span[@class="rating_num"]/text()')[0]
             try:
                 brief = movie.xpath('./div[@class="info"]/div[@class="bd"]/p[@class="quote"]/span/text()')[0]
             except Exception as e:
@@ -386,7 +403,7 @@ class DoubanTop250Parser(DoubanParser):
                 'rank': rank,
                 'movie_url': movie_url,
                 'movie_name': str(movie_name),
-                'star': str(star),
+                'score': str(score),
                 'brief': str(brief) or None,
             }
             data.append(movie_item)
