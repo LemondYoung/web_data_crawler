@@ -33,7 +33,7 @@ class RegisterBase(dict):
         return [self.register(func, func_name) for func_name, func in dic.items()]
 
     # 注册的单个对象
-    def register(self, func=None, func_name=None):
+    def register(self, func=None, func_name=None, func_info=None):
         if not func:  # 装饰器调用
             return lambda f: self.register_func(f, func_name)
         else:  # 普通调用

@@ -39,7 +39,7 @@ def split_douban_url(url):
     解析豆瓣url，其中二级url有movie和people类，三级url有movie_comment、user_movie和other
     通过判断是哪个类型，并得到类型对应的结果值
     :param url:
-    :return:
+    :return: 包含url、url类型、url类型值的dict
     """
     url_dict = split_url(url)
     if len(url_dict['path']) == 1:  # 一级
@@ -64,8 +64,13 @@ def split_douban_url(url):
             url_type = 'user_movie'
         else:
             url_type = 'other'
+    elif len(url_dict['path']) > 3:  # 四级以上，特定情况
+        if url_dict['path'][3] == 'movie' and url_dict['path'][4] == 'recommend':
+            url_type, url_type_value = 'movie_recommend', None
+        else:
+            url_type, url_type_value = 'other', None
     else:
-        url_type = 'other'
+        url_type, url_type_value = 'other', None
     split_result = {
         'url': url,
         'url_type': url_type,

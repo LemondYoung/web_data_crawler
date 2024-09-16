@@ -7,7 +7,7 @@ from lxml import etree
 
 from data_crawler.html_parser import Parser
 from data_parse.parse_tools.img_parser import ocr, get_img_format
-from data_parse.parse_tools.url_parse import split_url
+from data_parse.parse_tools.url_parser import split_url
 
 
 #

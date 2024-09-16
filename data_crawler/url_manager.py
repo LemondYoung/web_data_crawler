@@ -103,7 +103,7 @@ class UrlManager(object):
         """
         添加url（只能一条，多了不行）
         :param url_data: list_dict
-        :param is_run_all: 是否全部运行
+        :param is_run_all: 是否全部运行，否的话就先检查一下是不是已经解析过了，如果是，就不再添加了
         :return:
         """
         if url_data is None:
@@ -118,7 +118,7 @@ class UrlManager(object):
             if url_status is True:
                 logging.info(f'该url已经成功解析过了: {url_data["url"]}')
                 return None
-        save_result = self.save_url(url_data=[url_data], mode=STORE_DATA_UPDATE)
+        save_result = self.save_url(url_data=[url_data], mode=STORE_DATA_INSERT_UPDATE)
         return save_result
 
     # 更新url
@@ -175,7 +175,7 @@ def split_urls(urls, strategy="random"):
                     })
                     index = 1
                     sub_new_urls = []
-                    random_num = random.randint(1, 5)
+                    random_num = random.randint(3, 8)  # 随机停顿时间
                     continue
                 index += 1
             else:

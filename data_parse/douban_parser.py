@@ -18,11 +18,13 @@ from urllib import parse
 from lxml import etree
 import os
 import requests
+
+from data_parse.parse_tools.str_parser import parse_movie_name
 from utils.trading_calendar import today
 from constants import *
 from data_crawler.html_downloader import HtmlDownloader
-from data_parse.parse_tools.date_parse import standardize_date
-from data_parse.parse_tools.url_parse import split_douban_url, split_url
+from data_parse.parse_tools.date_parser import standardize_date
+from data_parse.parse_tools.url_parser import split_douban_url, split_url
 from data_sync.data_load.mysql_data_load import save_table_data
 from utils.class_tool.register_class import ParserRegister, DoubanParserRegister
 from abc import ABC, abstractmethod
@@ -43,7 +45,7 @@ class DoubanParser(object):
         self.cur_url = None
         self.table_name = None
         self.target_db = 'douban_data'
-        self.save_mode = STORE_DATA_REPLACE
+        self.save_mode = STORE_DATA_INSERT_UPDATE
 
     @abstractmethod
     def parse_data(self, html) -> dict:
@@ -93,11 +95,11 @@ class DoubanParser(object):
 
         if url_list:
             # 保存新增url，格式为update，避免覆盖已经存在的url
-            save_table_data(db_name=self.target_db, table_name='s_url_manager', records=url_list, mode=STORE_DATA_UPDATE)
+            save_table_data(db_name=self.target_db, table_name='s_url_manager', records=url_list, mode=STORE_DATA_INSERT_UPDATE)
         return parser_result, parser_msg
 
 
-@douban_parser_map.register(func_name='user')
+@douban_parser_map.register(func_name='user', func_info='豆瓣用户')
 class DoubanUserParser(DoubanParser):
 
     def __init__(self):
@@ -138,7 +140,7 @@ class DoubanUserParser(DoubanParser):
         return new_data
 
 
-@douban_parser_map.register(func_name='movie')
+@douban_parser_map.register(func_name='movie', func_info='豆瓣电影')
 class DoubanMovieParser(DoubanParser):
 
     def __init__(self):
@@ -154,21 +156,14 @@ class DoubanMovieParser(DoubanParser):
         poster_url = json_['image']
         movie_code = json_['url'].split('/')[2]
 
-        # movie_names = json_['name'].split(' ')
         # 正则表达式解析中文名称
         movie_name_str = json_['name']
-        match = re.match(r'[\u4e00-\u9fff\s]+', movie_name_str)
-        if match:
-            movie_name = match.group(0).strip()  # 提取并去除多余的空格
-            other_name = movie_name_str[len(movie_name):].strip()  # 提取其余部分并去除空格
-        else:
-            movie_name = json_['name'].split(' ')[0].strip()  # 取第一个单词作为中文名称
-            other_name = ''
+        movie_name, other_name = parse_movie_name(movie_name_str)  # 调用已经写好的名称解析函数（主要运用正则表达式）
 
         movie_url = "https://movie.douban.com" + json_['url']
 
-        summary_list = html.xpath('//div[@id="link-report-intra"]/span[@class="all hidden"]/text()')
-        summary = '\n'.join([element.strip(' \n') for element in summary_list])  # 沒分段
+        summary_list = html.xpath('//div[@id="link-report-intra"]/span[@property="v:summary"]/text()')
+        summary = '\n'.join([element.strip(' \n') for element in summary_list]) # 沒分段
         info_list = etree.tostring(html.xpath('.//div[@id="info"]')[0], encoding="utf-8", pretty_print=True, method="text").decode("utf-8").split('\n')
         director = scriptwriter = leading = genres = movie_country = movie_year_str = movie_length = movie_language = alias = score = score_number = None
         for info in info_list:
@@ -206,7 +201,7 @@ class DoubanMovieParser(DoubanParser):
         data_dict = [{
                 'movie_code': movie_code,
                 'movie_name': movie_name,
-                'movie_name2': other_name,
+                'other_name': other_name,
                 'movie_url': movie_url,
                 'poster_url': poster_url,
                 'score': score,
@@ -237,7 +232,7 @@ class DoubanMovieParser(DoubanParser):
         return data_dict
 
 
-@douban_parser_map.register(func_name='movie_comment')
+@douban_parser_map.register(func_name='movie_comment', func_info='豆瓣电影评论')
 class DoubanCommentParser(DoubanParser):
 
     def __init__(self):
@@ -303,7 +298,7 @@ class DoubanCommentParser(DoubanParser):
         return new_data
 
 
-@douban_parser_map.register(func_name='user_movie')
+@douban_parser_map.register(func_name='user_movie', func_info='豆瓣用户电影')
 class DoubanUserMovieParser(DoubanParser):
 
     def __init__(self):
@@ -376,7 +371,7 @@ class DoubanUserMovieParser(DoubanParser):
         return new_data
 
 
-@douban_parser_map.register(func_name='top250')
+@douban_parser_map.register(func_name='top250', func_info='豆瓣电影TOP250')
 class DoubanTop250Parser(DoubanParser):
 
     def __init__(self):
@@ -424,6 +419,24 @@ class DoubanTop250Parser(DoubanParser):
         return new_data
 
 
+@douban_parser_map.register(func_name='movie_recommend', func_info='豆瓣电影推荐')
+class DoubanMovieRecommend(DoubanParser):
+    """
+    豆瓣电影推荐，主要是获取豆瓣电影的列表，详细信息or评论可以等拿到url后再进一步解析
+    """
+    def __init__(self):
+        super().__init__()
+        self.table_name = 's_url_manager'
+
+    def parse_data(self, json_data):
+        # 该接口返回的json数据，可以直接使用不需要解析
+        data = []
+        for item in json_data['items']:
+            if item['type'] == 'movie':
+                movie_url = f"https://movie.douban.com/subject/{item['id']}/"
+                movie_name = item['title']
+                data.append({'url': movie_url, 'url_name': movie_name, 'url_type': 'movie'})
+        return {'data_dict': data, 'parse_status': True, 'parse_msg': None}
 
 
 if __name__ == '__main__':

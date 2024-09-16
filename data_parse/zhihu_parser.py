@@ -20,8 +20,8 @@ import requests
 from utils.trading_calendar import today
 from constants import *
 from data_crawler.html_downloader import HtmlDownloader
-from data_parse.parse_tools.date_parse import standardize_date
-from data_parse.parse_tools.url_parse import split_douban_url, split_url
+from data_parse.parse_tools.date_parser import standardize_date
+from data_parse.parse_tools.url_parser import split_douban_url, split_url
 from data_sync.data_load.mysql_data_load import save_table_data
 from utils.class_tool.register_class import ZhihuParserRegister
 

@@ -19,7 +19,7 @@ from data_crawler import url_manager
 from data_crawler.html_downloader import HtmlDownloader
 from data_crawler.url_manager import split_urls, get_url_list
 from data_parse.douban_parser import douban_parser_map
-from data_parse.parse_tools.url_parse import split_douban_url
+from data_parse.parse_tools.url_parser import split_douban_url
 from settings import HTML_DATA_PATH
 from utils.log import InterceptHandler
 
@@ -181,6 +181,28 @@ class DoubanCrawlerMain(object):
                 }
                 url = base_url + '?' + urllib.parse.urlencode(url_param)
                 url_list.append(url)
+
+        elif object_type == 'movie_recommend':
+            tags = ['喜剧', '爱情', '动作', '科幻', '动画', '悬疑', '犯罪', '惊悚', '冒险', '音乐', '历史', '奇幻',
+                    '恐怖', '战争', '传记', '歌舞', '武侠', '情色', '灾难', '西部', '纪录片', '短片']
+            count, step = 500, 20
+            list_list = [[start, step] for start in list(range(0, count))[0::step]]  # 指定长度和步长
+            url_list = []
+            base_url = 'https://m.douban.com/rexxar/api/v2/movie/recommend'
+            for tag in tags:
+                for start, step in list_list:
+                    url_param = {
+                        'refresh': 0,
+                        'start': start,
+                        'count': step,
+                        'uncollect': 'false',
+                        'selected_categories': '{"类型":"' + tag + '"}',
+                        'tags': tag,
+                        'ck': '-uwX'
+                    }
+                    url = base_url + '?' + urllib.parse.urlencode(url_param)
+                    # url = r'https://m.douban.com/rexxar/api/v2/movie/recommend?refresh=0&start=300&count=20&uncollect=false&selected_categories={"类型":"惊悚"}&uncollect=false&tags="惊悚"&ck=-uwX'
+                    url_list.append(url)
         else:
             url_list = False
 
@@ -228,7 +250,11 @@ class DoubanCrawlerMain(object):
                     continue
 
                 # 2. 获取下载器
-                html = self.htmlDownloader.request_data(url)
+                if parser_type == 'movie_recommend':
+                    headers_dict = {'Referer': 'http://movie.douban.com/explore'}
+                    html = self.htmlDownloader.request_api(url, headers_dict=headers_dict)
+                else:
+                    html = self.htmlDownloader.request_data(url, tunnel_dict={"proxy": "a968.kdltps.com:15818", "user": "t12648078105036", "pwd": "6w1xbsd2"})
                 # html_file = os.path.join(HTML_DATA_PATH, 'douban', 'user_251679774.html')
                 # html = self.htmlDownloader.read_local_html_file(html_file)
                 if html is False:
@@ -253,7 +279,8 @@ if __name__ == '__main__':
     crawler = DoubanCrawlerMain()
 
     # 爬取电影 movie
-    # urls = get_url_list(url_type='movie', db_name='douban_data', url_status='init')
+    urls = get_url_list(url_type='movie', db_name='douban_data', url_status='fail')
+    urls.reverse()
 
     # 爬取电影评论 movie_comment
     # urls = crawler.generate_url_list(object_type='movie_comment', object_value='Lion1874', status='P', sort='time')
@@ -267,6 +294,9 @@ if __name__ == '__main__':
     # 爬取电影 top250
     # urls = crawler.generate_url_list(object_type='top250')
 
+    # 爬取电影推荐 movie_recommend
+    # urls = crawler.generate_url_list(object_type='movie_recommend')
+
     # 指定爬取内容
-    urls = ['https://movie.douban.com/subject/4769314/','https://movie.douban.com/subject/3286543/','https://movie.douban.com/subject/3286538/','https://movie.douban.com/subject/3286528/','https://movie.douban.com/subject/3286552/']
+    # urls = ['https://movie.douban.com/subject/10772258/',]
     crawler.run_crawler(urls, is_run_all=True)
