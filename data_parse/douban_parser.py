@@ -163,7 +163,9 @@ class DoubanMovieParser(DoubanParser):
         movie_url = "https://movie.douban.com" + json_['url']
 
         summary_list = html.xpath('//div[@id="link-report-intra"]/span[@property="v:summary"]/text()')
-        summary = '\n'.join([element.strip(' \n') for element in summary_list]) # 沒分段
+        if len(summary_list) == 0:
+            summary_list = html.xpath('//div[@id="link-report-intra"]/span[@class="all hidden"]/text()')
+        summary = '\n'.join([element.strip(' \n') for element in summary_list])  # 沒分段
         info_list = etree.tostring(html.xpath('.//div[@id="info"]')[0], encoding="utf-8", pretty_print=True, method="text").decode("utf-8").split('\n')
         director = scriptwriter = leading = genres = movie_country = movie_year_str = movie_length = movie_language = alias = score = score_number = None
         for info in info_list:
