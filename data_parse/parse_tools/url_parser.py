@@ -36,46 +36,55 @@ def split_url(url):
 # 解析豆瓣url
 def split_douban_url(url):
     """
-    解析豆瓣url，其中二级url有movie和people类，三级url有movie_comment、user_movie和other
+    解析豆瓣url，其中二级url有movie和people类，三级url有movie_comment、user_movie和unknown
     通过判断是哪个类型，并得到类型对应的结果值
     :param url:
     :return: 包含url、url类型、url类型值的dict
     """
     url_dict = split_url(url)
-    if len(url_dict['path']) == 1:  # 一级
+    url_path = url_dict['path']
+    remark = None
+    if len(url_path) == 1:  # 一级
         url_type_value = None
-        if url_dict['path'][0] == 'top250':
+        if url_path[0] == 'top250':
             url_type = 'top250'
+        elif url_path[0] == 'subject_search':  # 没有对应的独立条目，会进入豆瓣搜索
+            url_type = 'unknown'
+            remark = '未知人物，搜索页面'
         else:
-            url_type = 'other'
-    elif len(url_dict['path']) == 2:  # 二级
-        url_type_value = url_dict['path'][1]  # 通常第二个值就是类型对应的类型值
-        if url_dict['path'][0] == 'subject':
+            url_type = 'unknown'
+    elif len(url_path) == 2:  # 二级
+        url_type_value = url_path[1]  # 通常第二个值就是类型对应的类型值
+        if url_path[0] == 'subject':
             url_type = 'movie'
-        elif url_dict['path'][0] == 'people':
+        elif url_path[0] == 'people':
             url_type = 'user'
+        elif url_path[0] == 'personage':
+            url_type = 'movie_personage'
         else:
-            url_type = 'other'
-    elif len(url_dict['path']) == 3:  # 三级
-        url_type_value = url_dict['path'][1]  # 通常第二个值就是类型对应的类型值
-        if url_dict['path'][0] == 'subject' and url_dict['path'][2] == 'comments':
+            url_type = 'unknown'
+    elif len(url_path) == 3:  # 三级
+        url_type_value = url_path[1]  # 通常第二个值就是类型对应的类型值
+        if url_path[0] == 'subject' and url_path[2] == 'comments':
             url_type = 'movie_comment'
-        elif url_dict['path'][0] == 'people' and url_dict['path'][2] == 'collect':
+        elif url_path[0] == 'people' and url_path[2] == 'collect':
             url_type = 'user_movie'
         else:
-            url_type = 'other'
-    elif len(url_dict['path']) > 3:  # 四级以上，特定情况
-        if url_dict['path'][3] == 'movie' and url_dict['path'][4] == 'recommend':
+            url_type = 'unknown'
+    elif len(url_path) > 3:  # 四级以上，特定情况
+        if url_path[3] == 'movie' and url_path[4] == 'recommend':
             url_type, url_type_value = 'movie_recommend', None
         else:
-            url_type, url_type_value = 'other', None
+            url_type, url_type_value = 'unknown', None
     else:
-        url_type, url_type_value = 'other', None
+        url_type, url_type_value = 'unknown', None
     split_result = {
         'url': url,
         'url_type': url_type,
         'url_type_value': url_type_value,
     }
+    if remark:
+        split_result['remark'] = remark
     return split_result
 
 

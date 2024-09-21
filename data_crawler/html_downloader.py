@@ -25,6 +25,7 @@ class HtmlDownloader(object):
         self.headers = {
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             'User-Agent': "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36",
+            'Connection': 'close',
             # 'Cookie': 'bid=lMoU-zG5PyM; ap_v=0,6.0; ll="118318"; _pk_ref.100001.4cf6=["","",1629127326,"https://www.douban.com/search?q=%E8%B5%B7%E9%A3%8E%E4%BA%86"]; _pk_id.100001.4cf6=dc9bc732d899e6b0.1629127326.1.1629127326.1629127326.; _pk_ses.100001.4cf6=*; __utma=30149280.44131403.1629127326.1629127326.1629127326.1; __utmc=30149280; __utmz=30149280.1629127326.1.1.utmcsr=douban.com|utmccn=(referral)|utmcmd=referral|utmcct=/search; __utma=223695111.1271915937.1629127326.1629127326.1629127326.1; __utmb=223695111.0.10.1629127326; __utmc=223695111; __utmz=223695111.1629127326.1.1.utmcsr=douban.com|utmccn=(referral)|utmcmd=referral|utmcct=/search; __gads=ID=577f92e35a24ede4-226a22dfcfca00e9:T=1629127330:RT=1629127330:S=ALNI_MZjLpS9mRSkcArTIkN5ovX4MmgbSg; _vwo_uuid_v2=D8D767506C7ADFF6F529102491C4ABD70|620d2d0e0c1be943504124c4fabda8f2; __utmt=1; __utmb=30149280.2.9.1629127342196',
         }
 
@@ -59,11 +60,15 @@ class HtmlDownloader(object):
         try:
             response = self.__request(url, connect_time, read_time, proxies=proxies)
         except Exception as e:
-            logging.error('网页获取失败:%s', e)
+            logging.error(f'网页获取失败，错误信息：{e}')
             return False
         status_code = response.status_code
         if status_code != 200:
-            logging.error('网页获取失败,%s', status_code)
+            if "有异常请求" in response.text:
+                error_msg = '有异常请求从你的IP地址发出'
+            else:
+                error_msg = '未知错误'
+            logging.error(f'网页获取失败:{status_code}，信息：{error_msg}')
             return False
         response.encoding = 'utf-8'
         html = response.text
@@ -92,8 +97,15 @@ class HtmlDownloader(object):
         return json_data
 
     def __request(self, url, connect_time=10, read_time=10, proxies=None):
-        response = requests.get(url, headers=self.headers, timeout=(connect_time, read_time), allow_redirects=True, proxies=proxies)
-        response.encoding = 'utf-8'
+        try:
+            response = requests.get(url, headers=self.headers, timeout=(connect_time, read_time), allow_redirects=True, proxies=proxies)
+            response.encoding = 'utf-8'
+        except Exception as e:
+            response = requests.get(url, headers=self.headers, timeout=(connect_time, read_time), allow_redirects=True, proxies=proxies)
+            response.encoding = 'utf-8'
+        if response.status_code != 200:  # 手动再重试一遍，提高成功率
+            response = requests.get(url, headers=self.headers, timeout=(connect_time, read_time), allow_redirects=True, proxies=proxies)
+            response.encoding = 'utf-8'
         return response
 
     def download_img(self, img_url, img_dir_path=None, img_type='jpg', return_type='obj'):
@@ -142,10 +154,6 @@ class HtmlDownloader(object):
         content = file.read()
         file.close()
         return content
-
-
-
-
 
 
 if __name__ == '__main__':

@@ -151,9 +151,11 @@ class DoubanMovieParser(DoubanParser):
         unknown_msg, error_msg = "", ""
         html = etree.HTML(html_source)
         # 短评列表
-        json_data = html.xpath('//script[@type="application/ld+json"]/text()')[0]
+        json_data = html.xpath('//script[@type="application/ld+json"]/text()')[0]  # 解析script标签中的json数据
         json_ = json.loads(json_data, strict=False)
         poster_url = json_['image']
+        # if poster_url == 'https://img2.doubanio.com/cuphead/movie-static/pics/movie_default_large.png':
+        #     poster_url = None
         movie_code = json_['url'].split('/')[2]
 
         # 正则表达式解析中文名称
@@ -193,6 +195,14 @@ class DoubanMovieParser(DoubanParser):
                 movie_year = datetime.datetime.strptime(movie_year_str, '%Y-%m-%d').date()
             except Exception as e:
                 movie_year = None
+        # 解析电影人物列表
+        personage_list = html.xpath('//span[@class="attrs"]/a')
+        personage_url_list = []
+        for personage in personage_list:
+            personage_url = str(personage.xpath('./@href')[0])
+            personage_name = str(personage.xpath('./text()')[0])
+            personage_url_list.append({'url': personage_url, 'url_name': personage_name,'url_type': 'movie_personage'})
+
         # 豆瓣评分
         try:
             movie_score = html.xpath('.//div[@id="interest_sectl"]')[0]
@@ -226,8 +236,9 @@ class DoubanMovieParser(DoubanParser):
             data = {'parse_status': False, 'parse_msg': error_msg+unknown_msg, 'data_dict': data_dict}
         elif unknown_msg:
             data = {'parse_status': None, 'parse_msg': unknown_msg, 'data_dict': data_dict}
-        else:
-            data = {'parse_status': True, 'parse_msg': None, 'data_dict': data_dict}
+        else:  # 正常解析
+            data = {'parse_status': True, 'parse_msg': None, 'data_dict': data_dict,
+                    'url_list': personage_url_list}
         return data
 
     def transform_data(self, data_dict):
@@ -307,8 +318,8 @@ class DoubanUserMovieParser(DoubanParser):
         super().__init__()
         self.table_name = 't_user_movie'
 
-    def parse_data(self, html1):
-        html = etree.HTML(html1)
+    def parse_data(self, html_ori):
+        html = etree.HTML(html_ori)
         sub_url = str(html.xpath('//div[@id="db-usr-profile"]/div[@class="pic"]/a/@href')[0])
         user_code = sub_url.split('/')[2]
         # 短评列表
@@ -422,7 +433,7 @@ class DoubanTop250Parser(DoubanParser):
 
 
 @douban_parser_map.register(func_name='movie_recommend', func_info='豆瓣电影推荐')
-class DoubanMovieRecommend(DoubanParser):
+class DoubanMovieRecommendParser(DoubanParser):
     """
     豆瓣电影推荐，主要是获取豆瓣电影的列表，详细信息or评论可以等拿到url后再进一步解析
     """
@@ -439,6 +450,101 @@ class DoubanMovieRecommend(DoubanParser):
                 movie_name = item['title']
                 data.append({'url': movie_url, 'url_name': movie_name, 'url_type': 'movie'})
         return {'data_dict': data, 'parse_status': True, 'parse_msg': None}
+
+
+@douban_parser_map.register(func_name='movie_personage', func_info='豆瓣电影人物')
+class DoubanMoviePersonageParser(DoubanParser):
+    """
+    豆瓣电影任务，导演、编剧、主演人物主页信息，外加影片数据量、最近的50部电影
+    """
+    def __init__(self):
+        super().__init__()
+        self.table_name = 't_movie_personage'
+
+    def request_collection(self, collection_id):
+        """ 直接请求收藏列表 """
+        collection_url = f'https://m.douban.com/rexxar/api/v2/elessar/work_collections/{collection_id}/works?collection_title=影视&sortby=collection&count=50'
+        json_data = HtmlDownloader().request_api(collection_url, headers_dict={'Referer': 'http://movie.douban.com/explore'})
+        # 电影数量
+        movie_count = json_data.get('total')
+        # 解析电影列表（样例，肯定不完整，该接口也没找到循环的方法）
+        movie_url_list = []
+        for item in json_data.get('works'):
+            movie = item['subject']
+            movie_url = movie['url']
+            movie_name = movie['title']
+            movie_url_list.append({'url': movie_url, 'url_name': movie_name, 'url_type': 'movie'})
+        return movie_count, movie_url_list
+
+    def parse_data(self, ori_html):
+        html = etree.HTML(ori_html)
+        # 解析url、code、头像链接
+        personage_url = html.xpath('//meta[@property="og:url"]/@content')[0]
+        personage_code = personage_url.split('/')[-1]
+        avatar_url = html.xpath('//img[@class="avatar"]/@src')[0]
+        # 正则表达式解析中文名称
+        personage_name_str = html.xpath('//h1[@class="subject-name"]/text()')[0]
+        personage_name, other_name = parse_movie_name(personage_name_str)  # 调用已经写好的名称解析函数（主要运用正则表达式）
+
+        # 解析人物简介
+        summary_list = html.xpath('//div[@class="content"]/p/text()')
+        summary = '\n'.join([element for element in summary_list])  # 沒分段
+
+        # 解析信息列表
+        info_list = html.xpath('.//ul[@class="subject-property"]/li')
+        info_dict = {}
+        for info_item in info_list:
+            info_name = info_item.xpath('./span[@class="label"]/text()')[0].strip().strip(':')
+            info_value = info_item.xpath('./span[@class="value"]/text()')[0].strip().strip(':')
+            info_dict[info_name] = info_value
+
+        # 其他电影人（不在同一个url）
+        # partners = html.xpath('.//section[@id="partners"]')[0]
+        # partner_herf = partners.xpath('./div[@class="partners-mod-info"]/a/@href')
+
+        # 使用正则表达式查找 收藏夹work_collection_id 的值
+        script_content = html.xpath('//div[@id="content"]/div/div/script/text()')[0]
+        match = re.search(r'window\.work_collection_id\s*=\s*(\d+);', script_content)
+        if match:
+            collection_id = match.group(1)
+            try:
+                movie_count, movie_url_list = self.request_collection(collection_id)
+            except Exception as e:
+                logging.error('请求收藏列表失败，原因：%s', e)
+                movie_count, movie_url_list = None, []
+        else:
+            collection_id, movie_count, movie_url_list = None, None, []
+        data = [{
+            'personage_code': personage_code,
+            'personage_name': personage_name,
+            'other_name': other_name,
+            'personage_url': personage_url,
+            'avatar_url': avatar_url,
+            'gender': info_dict.get('性别'),
+            'birth_date_str': info_dict.get('出生日期'),
+            'death_date_str': info_dict.get('去世日期'),
+            'birth_place': info_dict.get('出生地'),
+            'alias': info_dict.get('更多外文名'),
+            'family_members': info_dict.get('家庭成员'),
+            'profession': info_dict.get('职业'),
+            'collection_id': collection_id,
+            'movie_count': movie_count,
+            'summary': summary
+        }]
+        return {'data_dict': data, 'parse_status': True, 'parse_msg': None, 'url_list': movie_url_list}
+
+    def transform_data(self, data_dict):
+        for item in data_dict:
+            # 转换日期格式
+            try:
+                item['birth_date'] = datetime.datetime.strptime(item['birth_date_str'], '%Y年%m月%d日')
+            except Exception:
+                item['birth_date'] = None
+            try:
+                item['death_date'] = datetime.datetime.strptime(item['death_date_str'], '%Y年%m月%d日')
+            except Exception:
+                item['death_date'] = None
+        return data_dict
 
 
 if __name__ == '__main__':

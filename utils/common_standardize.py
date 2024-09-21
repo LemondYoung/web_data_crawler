@@ -52,7 +52,7 @@ def get_stable_date_list(start_date=None, end_date=None, order='asc', return_typ
     return data
 
 
-
+# 日期标准化
 def standardize_date(date, param_separator='', return_separator=''):
     """
     example: ['2021-01-01', '2021年5月11', '2021/5/11', '2021\\5\\11', '2020505', '20210511'] -> ['20210511', '20210511', '20210511', False, False, '20210511']
@@ -63,7 +63,7 @@ def standardize_date(date, param_separator='', return_separator=''):
     """
     import re
     date_separator = ['-', '年', '月', '/']
-    if param_separator not in ('', '-', '/') or return_separator not in ('', '-', '/'):
+    if param_separator not in ('', '-', '/', '年') or return_separator not in ('', '-', '/', '年'):
         return False
     date_intersection = list(set(param_separator) & set(date_separator))  # 取日期所有字符 和 匹配列表的 交集
     if len(date_intersection) > 0:  # 有交集
@@ -89,3 +89,8 @@ def standardize_date(date, param_separator='', return_separator=''):
         logging.error('日期取值错误')
         return False
     return new_date
+
+
+if __name__ == '__main__':
+    d = standardize_date('2021年', '年')
+    print(d)

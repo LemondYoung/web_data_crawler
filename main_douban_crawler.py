@@ -20,7 +20,7 @@ from data_crawler.html_downloader import HtmlDownloader
 from data_crawler.url_manager import split_urls, get_url_list
 from data_parse.douban_parser import douban_parser_map
 from data_parse.parse_tools.url_parser import split_douban_url
-from settings import HTML_DATA_PATH
+from settings import HTML_DATA_PATH, DOUBAN_COOKIE
 from utils.log import InterceptHandler
 
 logging.basicConfig(handlers=[InterceptHandler()], level=0)
@@ -243,9 +243,14 @@ class DoubanCrawlerMain(object):
                 windex += 1
 
                 # 1. 分析并检查url
-                parser_type = split_douban_url(url).get('url_type')
-                add_result = self.urlManager.add_url({'url': url, 'url_type': parser_type}, is_run_all)
-                if add_result is None:
+                split_dict = split_douban_url(url)
+                parser_type, url_remark = split_dict.get('url_type'), split_dict.get('remark')
+                add_url_dict = {'url': url, 'url_type': parser_type}
+                if url_remark:  # 这个的是未知状态才行
+                    add_url_dict['remark'] = url_remark
+                    add_url_dict['url_status'] = 2
+                add_result = self.urlManager.add_url(add_url_dict, is_run_all)
+                if add_result is None or url_remark:
                     logging.info('url无需解析，跳过')
                     continue
 
@@ -254,7 +259,9 @@ class DoubanCrawlerMain(object):
                     headers_dict = {'Referer': 'http://movie.douban.com/explore'}
                     html = self.htmlDownloader.request_api(url, headers_dict=headers_dict)
                 else:
-                    html = self.htmlDownloader.request_data(url, tunnel_dict={"proxy": "a968.kdltps.com:15818", "user": "t12648078105036", "pwd": "6w1xbsd2"})
+                    tunnel_dict = {"proxy": "p507.kdltpspro.com:15818", "user": "t12693231208168", "pwd": "4p3878eq"}
+                    headers_dict = {'Cookie': DOUBAN_COOKIE}
+                    html = self.htmlDownloader.request_data(url, tunnel_dict=tunnel_dict)
                 # html_file = os.path.join(HTML_DATA_PATH, 'douban', 'user_251679774.html')
                 # html = self.htmlDownloader.read_local_html_file(html_file)
                 if html is False:
@@ -279,8 +286,7 @@ if __name__ == '__main__':
     crawler = DoubanCrawlerMain()
 
     # 爬取电影 movie
-    urls = get_url_list(url_type='movie', db_name='douban_data', url_status='fail')
-    urls.reverse()
+    urls = get_url_list(url_type='movie', db_name='douban_data', url_status='init')[21000:]
 
     # 爬取电影评论 movie_comment
     # urls = crawler.generate_url_list(object_type='movie_comment', object_value='Lion1874', status='P', sort='time')
@@ -297,6 +303,11 @@ if __name__ == '__main__':
     # 爬取电影推荐 movie_recommend
     # urls = crawler.generate_url_list(object_type='movie_recommend')
 
+    # 爬取电影人 movie_personage
+    # urls = get_url_list(url_type='movie_personage', db_name='douban_data', url_status='init')[9000:]
+
     # 指定爬取内容
-    # urls = ['https://movie.douban.com/subject/10772258/',]
+    # urls = ['https://movie.douban.com/subject/35127531/',]
+    # urls = ['https://www.douban.com/personage/27259353/',]
+    urls = ['/subject_search?search_text=%EC%9D%B4%EA%B2%BD%EB%AF%BC']
     crawler.run_crawler(urls, is_run_all=True)

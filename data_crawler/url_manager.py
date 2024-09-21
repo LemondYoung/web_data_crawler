@@ -175,7 +175,7 @@ def split_urls(urls, strategy="random"):
                     })
                     index = 1
                     sub_new_urls = []
-                    random_num = random.randint(3, 8)  # 随机停顿时间
+                    random_num = random.randint(5, 10)  # 随机停顿时间，多停顿一下，心急吃不了热豆腐
                     continue
                 index += 1
             else:
