@@ -11,12 +11,45 @@
 """
 import logging
 import os
+import time
+from functools import wraps
+
 from PIL import Image
 
 import requests
 
 from settings import IMG_PATH
 from utils.widget import random_password
+
+
+def retry_request(max_retries=3, delay=1):
+    """
+    装饰器：在请求失败时重试指定次数
+    :param max_retries: 最大重试次数
+    :param delay: 重试之间的延迟时间（秒）
+    """
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            for attempt in range(1, max_retries + 1):
+                try:
+                    result = func(*args, **kwargs)
+                    if result is False:
+                        logging.error(f'尝试请求网页 {attempt}/{max_retries} 失败')
+                        if attempt < max_retries:
+                            time.sleep(delay)  # 等待一段时间再重试
+                    elif result and attempt > 1:
+                        logging.info(f'尝试请求网页 {attempt}/{max_retries} 次后成功')
+                        return result
+                    else:
+                        return result
+                except Exception as e:
+                    logging.error(f'尝试请求网页 {attempt}/{max_retries} 失败，错误信息：{e}')
+                    if attempt < max_retries:
+                        time.sleep(delay)  # 等待一段时间再重试
+            return False  # 在所有尝试失败后返回 False
+        return wrapper
+    return decorator
 
 
 class HtmlDownloader(object):
@@ -29,13 +62,34 @@ class HtmlDownloader(object):
             # 'Cookie': 'bid=lMoU-zG5PyM; ap_v=0,6.0; ll="118318"; _pk_ref.100001.4cf6=["","",1629127326,"https://www.douban.com/search?q=%E8%B5%B7%E9%A3%8E%E4%BA%86"]; _pk_id.100001.4cf6=dc9bc732d899e6b0.1629127326.1.1629127326.1629127326.; _pk_ses.100001.4cf6=*; __utma=30149280.44131403.1629127326.1629127326.1629127326.1; __utmc=30149280; __utmz=30149280.1629127326.1.1.utmcsr=douban.com|utmccn=(referral)|utmcmd=referral|utmcct=/search; __utma=223695111.1271915937.1629127326.1629127326.1629127326.1; __utmb=223695111.0.10.1629127326; __utmc=223695111; __utmz=223695111.1629127326.1.1.utmcsr=douban.com|utmccn=(referral)|utmcmd=referral|utmcct=/search; __gads=ID=577f92e35a24ede4-226a22dfcfca00e9:T=1629127330:RT=1629127330:S=ALNI_MZjLpS9mRSkcArTIkN5ovX4MmgbSg; _vwo_uuid_v2=D8D767506C7ADFF6F529102491C4ABD70|620d2d0e0c1be943504124c4fabda8f2; __utmt=1; __utmb=30149280.2.9.1629127342196',
         }
 
-    def request_data(self, url, connect_time=10, read_time=10, headers_dict=None, proxy=None, tunnel_dict=None):
+    def request_ip(self):
+        """
+        内网专用代理IP请求api，每请求一次更换一次代理
+        :return:
+        """
+        req_num = 0
+        s = requests.get('http://zhima.ippool.py:5010/proxies/')
+        # s = requests.get('http://zhima.ippool.py:5010/qingguo/')
+        s.encoding = 'utf-8'
+        if s.status_code == 200:
+            proxy = s.json()
+            return proxy
+        else:
+            if req_num > 5:
+                return None
+            req_num += 1
+            self.request_ip()
+
+    @retry_request(max_retries=5, delay=1)
+    def request_data(self, url, connect_time=10, read_time=10, headers_dict=None, proxy=None, use_proxies=False, proxies=None, tunnel_dict=None):
         """
         :param url:
         :param connect_time:
         :param read_time:
         :param headers_dict: 额外的header。主要是cookie
-        :param proxy: 代理ip地址
+        :param proxy: 单个代理ip地址
+        :param use_proxies: 使用代理ip池
+        :param proxies: 代理ip池
         :param tunnel_dict: 隧道配置 {"proxy": "a968.kdltps.com:15818", "user": "t12648078105036", "pwd": "6w1xbsd2"}
         :return:
         """
@@ -48,13 +102,13 @@ class HtmlDownloader(object):
                 'http': 'http://' + proxy,
                 'https': 'https://' + proxy,
             }
+        elif use_proxies:
+            proxies = self.request_ip()
         elif tunnel_dict:
             proxies = {
                 "http": f"http://{tunnel_dict['user']}:{tunnel_dict['pwd']}@{tunnel_dict['proxy']}/",
                 "https": f"http://{tunnel_dict['user']}:{tunnel_dict['pwd']}@{tunnel_dict['proxy']}/",
             }
-        else:
-            proxies = None
 
         logging.info('请求的url为：%s', url)
         try:
@@ -171,4 +225,5 @@ if __name__ == '__main__':
     # html = HtmlDownloader().request_data(url)
     html = HtmlDownloader().request_data(url, tunnel_dict={"proxy": "a968.kdltps.com:15818", "user": "t12648078105036", "pwd": "6w1xbsd2"})
     # html = HtmlDownloader().read_local_html_file(r"D:\app\pycharm\project\data_crawler\web_data_crawler\data\html\douban\user_251679774.html")
+    d = HtmlDownloader().request_ip()
     print(1)

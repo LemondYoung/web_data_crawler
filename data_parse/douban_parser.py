@@ -91,7 +91,11 @@ class DoubanParser(object):
             logging.warning(f'网页数据解析未知：{parser_msg}')
             return parser_result, parser_msg
         data_dict = self.transform_data(data_dict)
-        self.save_data(data_dict)
+        try:
+            self.save_data(data_dict)
+        except Exception as e:
+            logging.error(f'错误：{e}')
+            return False, str(e)
 
         if url_list:
             # 保存新增url，格式为update，避免覆盖已经存在的url
@@ -169,7 +173,7 @@ class DoubanMovieParser(DoubanParser):
             summary_list = html.xpath('//div[@id="link-report-intra"]/span[@class="all hidden"]/text()')
         summary = '\n'.join([element.strip(' \n') for element in summary_list])  # 沒分段
         info_list = etree.tostring(html.xpath('.//div[@id="info"]')[0], encoding="utf-8", pretty_print=True, method="text").decode("utf-8").split('\n')
-        director = scriptwriter = leading = genres = movie_country = movie_year_str = movie_length = movie_language = alias = score = score_number = None
+        director = scriptwriter = leading = genres = movie_country = movie_year_str = movie_year = movie_length = movie_language = alias = score = score_number = None
         for info in info_list:
             if '导演:' in info:
                 director = info.split('导演:')[1].strip(' ')
@@ -181,9 +185,9 @@ class DoubanMovieParser(DoubanParser):
                 genres = info.split('类型:')[1].strip(' ')
             elif '制片国家/地区:' in info:
                 movie_country = info.split('制片国家/地区:')[1].strip(' ')
-            elif '上映日期:' in info :
+            elif '上映日期:' in info:
                 movie_year_str = info.split('上映日期:')[1].strip(' ').split('(')[0]
-            elif '首播:' in info :
+            elif '首播:' in info:
                 movie_year_str = info.split('首播:')[1].strip(' ').split('(')[0]
             elif '片长:' in info:
                 movie_length = info.split('片长:')[1].strip(' ')
@@ -208,8 +212,9 @@ class DoubanMovieParser(DoubanParser):
             movie_score = html.xpath('.//div[@id="interest_sectl"]')[0]
             score = float(movie_score.xpath('.//strong/text()')[0])
             score_number = int(movie_score.xpath('.//a[@class="rating_people"]/span[1]/text()')[0])
-        except Exception:
-            unknown_msg += "豆瓣评分获取为空；"
+        except Exception:  # 可能是太小众了，或者还未上映，或者就不让评分，综合下来数量很多，咱也给他都通过
+            # unknown_msg += "豆瓣评分获取为空；"
+            pass
         data_dict = [{
                 'movie_code': movie_code,
                 'movie_name': movie_name,
@@ -223,6 +228,7 @@ class DoubanMovieParser(DoubanParser):
                 'director': director,
                 'scriptwriter': scriptwriter,
                 'leading': leading,
+                'movie_year_str': movie_year_str,
                 'movie_year': movie_year,
                 'movie_country': movie_country,
                 'movie_length': movie_length,
@@ -482,6 +488,7 @@ class DoubanMoviePersonageParser(DoubanParser):
         personage_url = html.xpath('//meta[@property="og:url"]/@content')[0]
         personage_code = personage_url.split('/')[-1]
         avatar_url = html.xpath('//img[@class="avatar"]/@src')[0]
+        # https://img1.doubanio.com/f/vendors/8dd0c794499fe925ae2ae89ee30cd225750457b4/pics/personage-default-medium.png
         # 正则表达式解析中文名称
         personage_name_str = html.xpath('//h1[@class="subject-name"]/text()')[0]
         personage_name, other_name = parse_movie_name(personage_name_str)  # 调用已经写好的名称解析函数（主要运用正则表达式）
