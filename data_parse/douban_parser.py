@@ -156,7 +156,8 @@ class DoubanMovieParser(DoubanParser):
         html = etree.HTML(html_source)
         # 短评列表
         json_data = html.xpath('//script[@type="application/ld+json"]/text()')[0]  # 解析script标签中的json数据
-        json_ = json.loads(json_data, strict=False)
+        clean_data = re.sub(r'\\(?!["\\/bfnrt])', r'\\\\', json_data)
+        json_ = json.loads(clean_data, strict=False)
         poster_url = json_['image']
         # if poster_url == 'https://img2.doubanio.com/cuphead/movie-static/pics/movie_default_large.png':
         #     poster_url = None
@@ -175,7 +176,9 @@ class DoubanMovieParser(DoubanParser):
         info_list = etree.tostring(html.xpath('.//div[@id="info"]')[0], encoding="utf-8", pretty_print=True, method="text").decode("utf-8").split('\n')
         director = scriptwriter = leading = genres = movie_country = movie_year_str = movie_year = movie_length = movie_language = alias = score = score_number = None
         for info in info_list:
-            if '导演:' in info:
+            if not info.strip(' '):
+                continue
+            elif '导演:' in info:
                 director = info.split('导演:')[1].strip(' ')
             elif '主演:' in info:
                 leading = info.split('主演:')[1].strip(' ')
@@ -195,17 +198,21 @@ class DoubanMovieParser(DoubanParser):
                 movie_language = info.split('语言:')[1].strip(' ')
             elif '又名:' in info:
                 alias = info.split('又名:')[1].strip(' ')
-            try:
-                movie_year = datetime.datetime.strptime(movie_year_str, '%Y-%m-%d').date()
-            except Exception as e:
-                movie_year = None
+        try:
+            movie_year = datetime.datetime.strptime(movie_year_str, '%Y-%m-%d').date()
+        except Exception as e:
+            movie_year = None
         # 解析电影人物列表
         personage_list = html.xpath('//span[@class="attrs"]/a')
         personage_url_list = []
         for personage in personage_list:
-            personage_url = str(personage.xpath('./@href')[0])
-            personage_name = str(personage.xpath('./text()')[0])
-            personage_url_list.append({'url': personage_url, 'url_name': personage_name,'url_type': 'movie_personage'})
+            try:
+                personage_url = str(personage.xpath('./@href')[0])
+                personage_name = str(personage.xpath('./text()')[0])
+                personage_url_list.append({'url': personage_url, 'url_name': personage_name,'url_type': 'movie_personage'})
+            except Exception as e:
+                logging.error(f'电影人物解析失败：{e}')
+                break
 
         # 豆瓣评分
         try:

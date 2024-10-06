@@ -21,6 +21,7 @@ class InterceptHandler(logging.Handler):
         dir_name = os.path.dirname(log_path)
         if dir_name and not os.path.isdir(dir_name):
             os.makedirs(dir_name)
+        # self.logger = logger.add(sink=sys.stderr, format='<level>{time:YYYY-MM-DD HH:mm:ss.SSS}</level> | <blue>{process: <5}</blue> | <level>{level: <7}</level> | [<blue>{name: <35}</blue>:<blue>{function:<20}</blue>:<blue>{line:<3}</blue>] - <level>{message}</level>')
         self.logger = logger.add(log_path, rotation="0:00", retention="10 days")  # 每天0点重建文件，文件保存10天
 
     def emit(self, record):

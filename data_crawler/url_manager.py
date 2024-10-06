@@ -45,7 +45,7 @@ def get_urls(url_type, db_name=None, style_code=None, limit=None, url_status='al
     elif url_status == 'fail':
         sql += """ and url_status = -1 """
     elif url_status == 'unknown':
-        sql += """ and url_status in (0, 2) """
+        sql += """ and url_status = 2 """
     elif url_status == 'init':
         sql += """ and url_status = 0 """
     sql += f""" and style_code = '{style_code}' """ if style_code else ''

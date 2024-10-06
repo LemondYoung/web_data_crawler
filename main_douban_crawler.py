@@ -251,6 +251,7 @@ class DoubanCrawlerMain(object):
                     add_url_dict['remark'] = url_remark
                     add_url_dict['url_status'] = 2
                 add_result = self.urlManager.add_url(add_url_dict, is_run_all)
+                # 判断1.如果url已经存在且不重复运行，则不再解析；2.如果url是已知的未知状态，也不再解析
                 if add_result is None or url_remark:
                     logging.info('url无需解析，跳过')
                     continue
@@ -263,6 +264,7 @@ class DoubanCrawlerMain(object):
                     tunnel_dict = {"proxy": "p507.kdltpspro.com:15818", "user": "t12693231208168", "pwd": "4p3878eq"}
                     headers_dict = {'Cookie': DOUBAN_COOKIE}
                     html = self.htmlDownloader.request_data(url, use_proxies=True)
+                    # html = self.htmlDownloader.request_data(url, headers_dict=headers_dict)
                 # html_file = os.path.join(HTML_DATA_PATH, 'douban', 'user_251679774.html')
                 # html = self.htmlDownloader.read_local_html_file(html_file)
                 if html is False:
@@ -281,7 +283,7 @@ class DoubanCrawlerMain(object):
                 if parser_result is False:
                     fail_count += 1
                     t_fail_count += 1
-                logging.warning('%s失败个数[%s/%s], 总失败个数[%s/%s] %s', '*'*40, fail_count, index, t_fail_count, t_index, '*'*40)
+                logging.warning('%s当前失败个数[%s/%s], 总失败个数[%s/%s] %s', '*'*40, fail_count, index, t_fail_count, t_index, '*'*40)
                 time.sleep(2)  # 停顿一会会，防止被封ip
             time.sleep(sleep)
 
@@ -291,8 +293,8 @@ if __name__ == '__main__':
     crawler = DoubanCrawlerMain()
 
     # 爬取电影 movie
-    # urls = get_url_list(url_type='movie', db_name='douban_data', url_status='init')
-    urls = get_url_list(url_type='movie', db_name='douban_data', url_status='fail')
+    urls = get_url_list(url_type='movie', db_name='douban_data', url_status='init')
+    # urls = get_url_list(url_type='movie', db_name='douban_data', url_status='fail')
     urls.reverse()
 
     # 爬取电影评论 movie_comment
@@ -311,12 +313,14 @@ if __name__ == '__main__':
     # urls = crawler.generate_url_list(object_type='movie_recommend')
 
     # 爬取电影人 movie_personage
-    # urls = get_url_list(url_type='movie_personage', db_name='douban_data', url_status='init')
-    # urls2 = get_url_list(url_type='movie_personage', db_name='douban_data', url_status='fail')
+    # urls = get_url_list(url_type='movie_personage', db_name='douban_data', url_status='init')[0000:10000]
+    # urls.reverse()
+    # urls = get_url_list(url_type='movie_personage', db_name='douban_data', url_status='fail')
+    # urls.reverse()
     # urls = urls1 + urls2
 
     # 指定爬取内容
     # urls = ['https://www.douban.com/personage/27255890/',]
-    # urls = ['https://www.douban.com/personage/27259353/',]
-    # urls = ['https://movie.douban.com/subject/5049104/']
+    # urls = ['https://www.douban.com/personage/36688013/',]
+    # urls = ['https://movie.douban.com/subject/5977807/']
     crawler.run_crawler(urls, is_run_all=True)
