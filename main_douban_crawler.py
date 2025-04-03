@@ -240,7 +240,8 @@ class DoubanCrawlerMain(object):
             logging.info('%s', '*'*110)
             fail_count = 0
             for index, url in enumerate(urls, 1):
-                logging.warning('%s当前url进度[%s/%s], 总进度[%s/%s] %s', '*'*40, index, len(urls), t_index, len(all_url), '*'*40)
+                url_status = None
+                logging.warning(f"{'*'*40}当前url进度[{index}/{len(urls)}], 总进度[{t_index}/{len(all_url)}] {'*'*40}")
                 t_index += 1
 
                 # 1. 分析并检查url
@@ -263,8 +264,8 @@ class DoubanCrawlerMain(object):
                 else:
                     tunnel_dict = {"proxy": "p507.kdltpspro.com:15818", "user": "t12693231208168", "pwd": "4p3878eq"}
                     headers_dict = {'Cookie': DOUBAN_COOKIE}
-                    html = self.htmlDownloader.request_data(url, use_proxies=True)
-                    # html = self.htmlDownloader.request_data(url, headers_dict=headers_dict)
+                    html, url_status = self.htmlDownloader.request_data(url, use_proxies=True)
+                    # html, url_status = self.htmlDownloader.request_data(url, headers_dict=headers_dict)
                 # html_file = os.path.join(HTML_DATA_PATH, 'douban', 'user_251679774.html')
                 # html = self.htmlDownloader.read_local_html_file(html_file)
                 if html is False:
@@ -279,11 +280,11 @@ class DoubanCrawlerMain(object):
                     logging.info(f'当前解析类型为：{parser_type}，对应解析器：{cur_parser}', )
                     parser_result, parser_msg = cur_parser().run_parser(html=html)
                 # 4. 更新url
-                self.urlManager.update_url(url, result=parser_result, msg=parser_msg)
+                self.urlManager.update_url(url, result=parser_result, msg=parser_msg, url_status=url_status)
                 if parser_result is False:
                     fail_count += 1
                     t_fail_count += 1
-                logging.warning('%s当前失败个数[%s/%s], 总失败个数[%s/%s] %s', '*'*40, fail_count, index, t_fail_count, t_index, '*'*40)
+                logging.warning(f"{'*'*40}当前失败个数[{fail_count}/{index}], 总失败个数[{t_fail_count}/{t_index}] {'*'*40}")
                 time.sleep(2)  # 停顿一会会，防止被封ip
             time.sleep(sleep)
 
@@ -293,9 +294,9 @@ if __name__ == '__main__':
     crawler = DoubanCrawlerMain()
 
     # 爬取电影 movie
-    urls = get_url_list(url_type='movie', db_name='douban_data', url_status='init')
-    # urls = get_url_list(url_type='movie', db_name='douban_data', url_status='fail')
-    urls.reverse()
+    # urls = get_url_list(url_type='movie', db_name='douban_data', url_status='init')
+    urls = get_url_list(url_type='movie', db_name='douban_data', url_status='fail')
+    # urls.reverse()
 
     # 爬取电影评论 movie_comment
     # urls = crawler.generate_url_list(object_type='movie_comment', object_value='Lion1874', status='P', sort='time')
@@ -313,7 +314,7 @@ if __name__ == '__main__':
     # urls = crawler.generate_url_list(object_type='movie_recommend')
 
     # 爬取电影人 movie_personage
-    # urls = get_url_list(url_type='movie_personage', db_name='douban_data', url_status='init')[0000:10000]
+    # urls = get_url_list(url_type='movie_personage', db_name='douban_data', url_status='init')[0000:20000]
     # urls.reverse()
     # urls = get_url_list(url_type='movie_personage', db_name='douban_data', url_status='fail')
     # urls.reverse()
@@ -322,5 +323,5 @@ if __name__ == '__main__':
     # 指定爬取内容
     # urls = ['https://www.douban.com/personage/27255890/',]
     # urls = ['https://www.douban.com/personage/36688013/',]
-    # urls = ['https://movie.douban.com/subject/5977807/']
+    # urls = ['https://www.douban.com/personage/27221856/']
     crawler.run_crawler(urls, is_run_all=True)

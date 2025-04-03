@@ -33,21 +33,23 @@ def retry_request(max_retries=3, delay=1):
         def wrapper(*args, **kwargs):
             for attempt in range(1, max_retries + 1):
                 try:
-                    result = func(*args, **kwargs)
+                    result, url_status = func(*args, **kwargs)
+                    if result is False and url_status == -2:
+                        return result, url_status
                     if result is False:
                         logging.error(f'尝试请求网页 {attempt}/{max_retries} 失败')
                         if attempt < max_retries:
                             time.sleep(delay)  # 等待一段时间再重试
                     elif result and attempt > 1:
                         logging.info(f'尝试请求网页 {attempt}/{max_retries} 次后成功')
-                        return result
+                        return result, url_status
                     else:
-                        return result
+                        return result, url_status
                 except Exception as e:
                     logging.error(f'尝试请求网页 {attempt}/{max_retries} 失败，错误信息：{e}')
                     if attempt < max_retries:
                         time.sleep(delay)  # 等待一段时间再重试
-            return False  # 在所有尝试失败后返回 False
+            return False, -1  # 在所有尝试失败后返回 False
         return wrapper
     return decorator
 
@@ -111,22 +113,33 @@ class HtmlDownloader(object):
             }
 
         logging.info('请求的url为：%s', url)
+        error_msg, url_status = '', 1
         try:
             response = self.__request(url, connect_time, read_time, proxies=proxies)
         except Exception as e:
+            url_status = -1
             logging.error(f'网页获取失败，错误信息：{e}')
-            return False
+            return False, url_status
+
         status_code = response.status_code
-        if status_code != 200:
-            if "有异常请求" in response.text:
-                error_msg = '有异常请求从你的IP地址发出'
-            else:
-                error_msg = '未知错误'
-            logging.error(f'网页获取失败:{status_code}，信息：{error_msg}')
-            return False
         response.encoding = 'utf-8'
         html = response.text
-        return html
+        if status_code != 200:
+            if "有异常请求" in html:
+                error_msg, url_status = '有异常请求从你的IP地址发出', -1
+            elif "请求过于频繁" in html:
+                error_msg, url_status = '请求过于频繁，请稍后再试', -1
+            elif "请求被拒绝" in html:
+                error_msg, url_status = '请求被拒绝，请检查你的网络设置', -1
+            elif "页面不存在" in html:
+                error_msg, url_status = '页面不存在', -2
+            elif "条目豆瓣不收录" in html:
+                error_msg, url_status = '该条目豆瓣不收录', -2
+            else:
+                error_msg, url_status = '未知错误', -1
+            logging.error(f'网页获取失败:{status_code}，信息：{error_msg}')
+            return False, url_status
+        return html, url_status
 
     # 请求api
     def request_api(self, url, connect_time=10, read_time=10, headers_dict=None):

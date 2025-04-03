@@ -38,7 +38,8 @@ def get_urls(url_type, db_name=None, style_code=None, limit=None, url_status='al
     """
     sql = f"""
     select url_type, url from s_url_manager
-    where url_type = '{url_type}'
+    where url_type = '{url_type}' 
+    and url_status != -2  -- 剔除彻底失败的url
     """
     if url_status == 'success':
         sql += """ and url_status = 1 """
@@ -122,14 +123,17 @@ class UrlManager(object):
         return save_result
 
     # 更新url
-    def update_url(self, url, result=True, msg=None):
+    def update_url(self, url, result=True, msg=None, url_status=None):
         """ 更新url
         :param url:
         :param result: 成功或失败或未知，都要更新
         :param msg:
+        :param url_status: 传入的url解析结果
         :return:
         """
-        if result is False:
+        if url_status:
+            pass
+        elif result is False:
             url_status = -1
         elif result is None:
             url_status = 2
